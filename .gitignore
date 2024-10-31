@@ -9,6 +9,7 @@
 /MC_plots/
 /plots/
 
+/Code/.DS_Store
 .env
 .DS_Store
 .ipynb_checkpoints/
