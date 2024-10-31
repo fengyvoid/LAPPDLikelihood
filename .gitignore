@@ -1,0 +1,14 @@
+/*/__pycache__/
+*.pyc
+*.pyo
+
+*.log
+
+/data/
+/Data_unmodified/
+/MC_plots/
+/plots/
+
+.env
+.DS_Store
+.ipynb_checkpoints/
