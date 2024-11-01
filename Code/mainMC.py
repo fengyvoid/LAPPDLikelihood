@@ -16,6 +16,8 @@ import datetime
 import pytz
 import csv
 import json
+import os
+import sys
 
 # import other functions
 import EventDisplay as ed
@@ -52,6 +54,16 @@ if __name__ == "__main__":
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
 
+    if not os.path.exists(basePath):
+        print(f"Error: Base path '{basePath}' does not exist.")
+        sys.exit(1)
+
+    for path in [beam_data_path, LAPPD_profile_path, plot_save_path]:
+        if not os.path.exists(path):
+            os.makedirs(path)
+            print(f"Create directory: {path}")
+
+        
     root_file_pattern = beam_data_path + 'ANNIETree_MC_withLAPPD.root'
 
     file_list = np.sort(glob.glob(root_file_pattern))
