@@ -248,6 +248,51 @@ def weightedGain(pe_num):
     
     return Gained_PE
     
+def sample_PE_Poisson(LAPPD_Hit_2D):
+    LAPPD_Hit_2D_sampled = []
+    for id in range(len(LAPPD_Hit_2D)):
+        LAPPD_Hit_2D_sampled.append([])
+        for strip in range(len(LAPPD_Hit_2D[id])):
+            LAPPD_Hit_2D_sampled[id].append([])
+            for hit in LAPPD_Hit_2D[id][strip]:
+                hit_y, hit_time, hit_pe = hit
+                hit_pe = np.random.poisson(hit_pe)
+                if(hit_pe != 0 ):
+                    LAPPD_Hit_2D_sampled[id][strip].append((hit_y, hit_time, hit_pe))
+    return LAPPD_Hit_2D_sampled
+
+
+def sample_updatedHits_PE_Poisson(hits_withPE):
+    sampled_hits_withPE = []
+    for step in range(len(hits_withPE)):
+        sampled_hits_withPE.append([])
+        for hit in hits_withPE[step]:
+            LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe = hit
+            sampled_pe = np.random.poisson(weighted_pe)
+            if(sampled_pe != 0):
+                sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
+    return sampled_hits_withPE
+
+def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1):
+    LAPPD_Hit_2D = []
+    totalPE = 0
+    
+    for i in range (number_of_LAPPDs):
+        LAPPD_Hit_2D.append([])
+        for j in range(28):
+            LAPPD_Hit_2D[i].append([])
+
+    for i in range (len(hits_withPE)):
+        # each particle step
+        for j in range(len(hits_withPE[i])):
+            # just loop all hits
+            # for each strip, i.e. same x position but different y position
+            # each second index is a strip, loop the first index to get all positions on that strip
+            LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
+            totalPE+=hits_withPE[i][j][5]
+            
+    return LAPPD_Hit_2D, totalPE
+
 
 # 使用sPE和hit info来生成waveform
 def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize, speed_of_light, strip_direction):
@@ -260,7 +305,7 @@ def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize,
 
     for hit in hit_list:
         hit_y, hit_time, hit_pe = hit
-        hit_pe = weightedGain(hit_pe)
+        #hit_pe = weightedGain(hit_pe)
         y_pos = (hit_y+0.5) * LAPPD_gridSize  # hit_y 为 strip index，需要转换为坐标
         if hit_time is None or hit_time ==0:
             continue
@@ -380,7 +425,7 @@ def align_waveforms(Sim_Waveform, Data_Waveform, SimRange=(50, 150), shiftRange=
                 # Calculate the sum of absolute differences
                 diff = 0
                 for i in range(len(data_waveform_to_compare)):
-                    scaling = data_waveform_to_compare[i]
+                    scaling = data_waveform_to_compare[i]**3
                     #scaling = 1
                     diff += np.abs(data_waveform_to_compare[i] - sim_cut_waveform[i]) * scaling
 

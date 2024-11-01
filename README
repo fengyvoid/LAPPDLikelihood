@@ -1,1 +1,10 @@
 Likelihood reconstruction method based on residual of waveforms
+
+
+Usage:
+
+
+cd Code
+python3 main.py
+or python3 mainMC.py for MC data
+

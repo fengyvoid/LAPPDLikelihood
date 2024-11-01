@@ -1020,6 +1020,9 @@ def DisplayHits(savePath, hits, LAPPD_grids):
     hit_time_matrices = [np.zeros(LAPPD_grids[i].shape[:2]) for i in range(num_LAPPDs)]
     hit_counts = [np.zeros(LAPPD_grids[i].shape[:2]) for i in range(num_LAPPDs)]
 
+    tick_fontsize = 18
+    label_fontsize = 18
+    text_fontsize = 24
 
     for p in range(len(hits)):
         for hit in hits[p]:
@@ -1033,17 +1036,19 @@ def DisplayHits(savePath, hits, LAPPD_grids):
     fig, axis = plt.subplots(2, num_LAPPDs, figsize=(xSize, 20), squeeze=False)
     for i in range(num_LAPPDs):
         impe = axis[0, i].imshow(np.ma.masked_equal(hit_pe_matrices[i], 0), cmap='viridis', interpolation='nearest')
-        axis[0, i].set_title(f'LAPPD {i} PE')
-        axis[0, i].set_xlabel('Strip Number')
-        axis[0, i].set_ylabel('Position on Strip')
+        axis[0, i].set_title(f'LAPPD {i} PE', fontsize=label_fontsize)
+        axis[0, i].set_xlabel('Strip Number', fontsize=label_fontsize)
+        axis[0, i].set_ylabel('Position on Strip', fontsize=label_fontsize)
+        axis[0, i].tick_params(axis='both', labelsize=tick_fontsize)
         #axis[0, i].set_xlim(0, 28)
         #axis[0, i].set_ylim(0, 28)
         plt.colorbar(impe, ax=axis[0, i])
 
         imtime = axis[1, i].imshow(np.ma.masked_equal(hit_time_matrices[i], 0), cmap='coolwarm', interpolation='nearest')
-        axis[1, i].set_title(f'LAPPD {i} Hit Time')
-        axis[1, i].set_xlabel('Strip Number')
-        axis[1, i].set_ylabel('Position on Strip')
+        axis[1, i].set_title(f'LAPPD {i} Hit Time', fontsize=label_fontsize)
+        axis[1, i].set_xlabel('Strip Number', fontsize=label_fontsize)
+        axis[1, i].set_ylabel('Position on Strip', fontsize=label_fontsize)
+        axis[1, i].tick_params(axis='both', labelsize=tick_fontsize)
         #axis[1, i].set_xlim(0, 28)
         #axis[1, i].set_ylim(0, 28)
         plt.colorbar(imtime, ax=axis[1, i])

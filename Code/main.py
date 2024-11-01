@@ -407,6 +407,7 @@ if __name__ == '__main__':
                                             # for each strip, i.e. same x position but different y position
                                             # each second index is a strip, loop the first index to get all positions on that strip
                                             # each hit is (first_index(y direction), hit time, pe number)
+                                            # LAPPD_Hit_2D[LAPPD_index][strip_index].append((y_index, hit_time, pe_number))
                                             LAPPD_Hit_2D[updated_hits_withPE[i][j][0]][updated_hits_withPE[i][j][2]].append((updated_hits_withPE[i][j][1], updated_hits_withPE[i][j][3], updated_hits_withPE[i][j][5]))
                                             totalPE+=updated_hits_withPE[i][j][5]
 

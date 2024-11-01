@@ -346,11 +346,11 @@ if __name__ == "__main__":
                 
                 
                 ######## set some test parameters
-                x_step = 4
+                x_step = 1
                 x_step_size = 0.05
-                y_step = 4
+                y_step = 1
                 y_step_size = 0.05
-                theta_step = 1
+                theta_step = 0
                 theta_step_size = np.radians(1)  # 转换成弧度
                 phi_step = 0
                 phi_step_size = np.radians(1)  # 转换成弧度
@@ -433,26 +433,39 @@ if __name__ == "__main__":
                                 #loop second index gives different x
 
 
-                                totalPE = 0
+                                    
+                                # use the updated_hits_withPE, and do poisson sampling based on the hit PE in each hit.
+                                # do this sampling 5 times, calculate the waveform and min_diff for each time
+                                # use the best min_diff to pick the best result, save the best waveform and best fit hits
+                                
+                                
+                                sampleTimes = 5
+                                    
+                                min_diff_best = float('inf')
+                                best_shiftDT = 0
+                                
+                                    
+                                for sample_i in range(sampleTimes):
+                                    
+                                    sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE)
+                                    LAPPD_Hit_2D_sampled, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1)
 
-                                LAPPD_Hit_2D = []
-                                for i in range (1):
-                                    LAPPD_Hit_2D.append([])
-                                    for j in range(28):
-                                        LAPPD_Hit_2D[i].append([])
+                                    Sim_Waveforms_sampled = proj.generate_lappd_waveforms(LAPPD_Hit_2D_sampled, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
+                                    shiftDT_sampled, min_diff_sampled, waveform_diff_sampled, Sim_Waveform_shifted_sampled = proj.align_waveforms(Sim_Waveforms_sampled[0], Data_Waveform[0])
+                                    
+                                    print("sample time: ", sample_i, " Min diff: ", min_diff_sampled, " Total PE: ", totalPE)
+                                    
+                                    if(min_diff_sampled < min_diff_best):
+                                        min_diff_best = min_diff_sampled
+                                        bestResultWaveform = Sim_Waveform_shifted_sampled
+                                        bestFitHits = sampled_hits_withPE
+                                        best_totalPE = totalPE
+                                        SimPE = totalPE
+                                        best_shiftDT = shiftDT_sampled
 
-                                for i in range (len(updated_hits_withPE)):
-                                    # each particle step
-                                    for j in range(len(updated_hits_withPE[i])):
-                                        # just loop all hits
-
-                                        # for each strip, i.e. same x position but different y position
-                                        # each second index is a strip, loop the first index to get all positions on that strip
-                                        LAPPD_Hit_2D[updated_hits_withPE[i][j][0]][updated_hits_withPE[i][j][2]].append((updated_hits_withPE[i][j][1], updated_hits_withPE[i][j][3], updated_hits_withPE[i][j][5]))
-                                        totalPE+=updated_hits_withPE[i][j][5]
-
-                                print("Total PE: ", totalPE)
-
+                                print("Shifted DT: ", best_shiftDT, " Min diff: ", min_diff_best)
+                                print("Total PE: ", best_totalPE)
+                                '''
                                 Sim_Waveforms = proj.generate_lappd_waveforms(LAPPD_Hit_2D, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
                                 #Sim_Waveforms[LAPPD_id][0=dowm, 1=up][256]
                                 
@@ -465,15 +478,22 @@ if __name__ == "__main__":
                                     bestResultWaveform = Sim_Waveform_shifted
                                     bestFitHits = updated_hits_withPE
                                     SimPE = totalPE
+                                '''
+                                    
                                 
-                                TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff, totalPE])
+                                TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff_best, best_totalPE])
                 
                 print("Best fit result: ", TotalFitResult)
                 output_txtfile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCoutput.txt'
-
-
                 with open(output_txtfile, 'w') as filetxt:
                     json.dump(TotalFitResult, filetxt)
+                    
+                    
+                #print("Best fit hits: ", bestFitHits)
+                bestFitHits_converted = [[(int(a), int(b), int(c), float(d), float(e), int(f)) for (a, b, c, d, e, f) in sublist] for sublist in bestFitHits]
+                output_peTXTFile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCPEInfo.txt'
+                with open(output_peTXTFile, 'w') as filetxt:
+                    json.dump(bestFitHits_converted, filetxt)
 
                 
                 plotName = plot_save_path + 'Event' + str(totalNumOfEvent) + '_MCwaveform.png'
