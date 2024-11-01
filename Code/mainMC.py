@@ -346,11 +346,11 @@ if __name__ == "__main__":
                 
                 
                 ######## set some test parameters
-                x_step = 1
+                x_step = 4
                 x_step_size = 0.05
-                y_step = 1
+                y_step = 4
                 y_step_size = 0.05
-                theta_step = 0
+                theta_step = 1
                 theta_step_size = np.radians(1)  # 转换成弧度
                 phi_step = 0
                 phi_step_size = np.radians(1)  # 转换成弧度
@@ -358,7 +358,10 @@ if __name__ == "__main__":
                 
                 # testing projection
                 print("Event number ", totalNumOfEvent)
-
+                if(totalNumOfEvent==430 or totalNumOfEvent==248):
+                    continue
+                
+                
                 mu_direction = [tree.trueDirX, tree.trueDirY, tree.trueDirZ]
                 mu_direction = mu_direction/np.linalg.norm(mu_direction)
                 muon_fit_start_position = np.array([tree.trueVtxX, tree.trueVtxY, tree.trueVtxZ])/100
@@ -483,7 +486,7 @@ if __name__ == "__main__":
                                 
                                 TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff_best, best_totalPE])
                 
-                print("Best fit result: ", TotalFitResult)
+                #print("Best fit result: ", TotalFitResult)
                 output_txtfile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCoutput.txt'
                 with open(output_txtfile, 'w') as filetxt:
                     json.dump(TotalFitResult, filetxt)

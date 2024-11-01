@@ -1092,7 +1092,7 @@ def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE 
     axes[0, 1].legend(loc='upper left')
     if DataPE != -1:
         axes[0, 1].text(0.05, 0.05, f"Total PE: {DataPE}", transform=axes[0, 1].transAxes, 
-                        fontsize=text_fontsize, verticalalignment='bottom')
+                        fontsize=text_fontsize, verticalalignment='bottom') 
 
     # Plotting SimWaveform, side 0
     for strip in range(28):
@@ -1104,7 +1104,7 @@ def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE 
     axes[1, 0].tick_params(axis='both', labelsize=tick_fontsize)  # 设置tick的字号
     axes[1, 0].legend(loc='upper left')
     if SimPE != -1:
-        axes[1, 0].text(0.05, 0.05, f"Total PE: {SimPE:.2f}", transform=axes[1, 0].transAxes, 
+        axes[1, 0].text(0.05, 0.05, f"Total PE: {SimPE:.1f}", transform=axes[1, 0].transAxes, 
                         fontsize=text_fontsize, verticalalignment='bottom')
     # Plotting SimWaveform, side 1
     for strip in range(28):
@@ -1116,7 +1116,7 @@ def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE 
     axes[1, 1].tick_params(axis='both', labelsize=tick_fontsize)  # 设置tick的字号
     axes[1, 1].legend(loc='upper left')
     if SimPE != -1:
-        axes[1, 1].text(0.05, 0.05, f"Total PE: {SimPE:.2f}", transform=axes[1, 1].transAxes, 
+        axes[1, 1].text(0.05, 0.05, f"Total PE: {SimPE:.1f}", transform=axes[1, 1].transAxes, 
                         fontsize=text_fontsize, verticalalignment='bottom')
     
     # Adjust layout and save figure

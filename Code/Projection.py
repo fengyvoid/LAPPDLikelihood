@@ -427,7 +427,7 @@ def align_waveforms(Sim_Waveform, Data_Waveform, SimRange=(50, 150), shiftRange=
                 for i in range(len(data_waveform_to_compare)):
                     scaling = data_waveform_to_compare[i]**3
                     #scaling = 1
-                    diff += np.abs(data_waveform_to_compare[i] - sim_cut_waveform[i]) * scaling
+                    diff += np.abs(data_waveform_to_compare[i] - sim_cut_waveform[i]) * np.abs(scaling)
 
                 
                 # Accumulate the differences
