@@ -14,12 +14,12 @@ event_number = sys.argv[1]  # 获取命令行传入的数字参数
 
 # 构造文件名
 #input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/plots/Event{event_number}output.txt'
-#input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/MC_plots/Event{event_number}_MCoutput.txt'
+input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/MC_plots/Event{event_number}_MCoutput.txt'
 
 
 #input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/MC_plots/4410stepTest_w/Event{event_number}_MCoutput.txt'
 
-input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/MC_plots/12.2200_SamePos_^3w_Poisson/Event{event_number}_MCoutput.txt'
+#input_file = f'/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/MC_plots/13.4410_0.03_SamePos_^3w_Poisson/Event{event_number}_MCoutput.txt'
 
 # 读取数据
 with open(input_file, 'r') as file:

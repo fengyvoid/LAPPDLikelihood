@@ -359,9 +359,9 @@ if __name__ == "__main__":
                 
                 ######## set some test parameters
                 x_step = 4
-                x_step_size = 0.05
+                x_step_size = 0.03
                 y_step = 4
-                y_step_size = 0.05
+                y_step_size = 0.03
                 theta_step = 1
                 theta_step_size = np.radians(1)  # 转换成弧度
                 phi_step = 0
@@ -454,7 +454,7 @@ if __name__ == "__main__":
                                 # use the best min_diff to pick the best result, save the best waveform and best fit hits
                                 
                                 
-                                sampleTimes = 5
+                                sampleTimes = 10
                                     
                                 min_diff_best = float('inf')
                                 best_shiftDT = 0
@@ -473,6 +473,7 @@ if __name__ == "__main__":
                                     if(min_diff_sampled < min_diff_best):
                                         min_diff_best = min_diff_sampled
                                         bestResultWaveform = Sim_Waveform_shifted_sampled
+                                        #bestResultWaveform = Sim_Waveforms_sampled[0]
                                         bestFitHits = sampled_hits_withPE
                                         best_totalPE = totalPE
                                         SimPE = totalPE

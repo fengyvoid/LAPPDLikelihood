@@ -396,7 +396,7 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
 
 
 
-def align_waveforms(Sim_Waveform, Data_Waveform, SimRange=(50, 150), shiftRange=(80, 130)):
+def align_waveforms(Sim_Waveform, Data_Waveform, SimRange=(0, 100), shiftRange=(120, 160)):
     # Cut the Sim_Waveform according to SimRange
     Sim_Waveform_cut = Sim_Waveform[:, :, SimRange[0]:SimRange[1]]
     
