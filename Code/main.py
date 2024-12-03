@@ -405,7 +405,7 @@ if __name__ == '__main__':
                                     
                                     for sample_i in range(sampleTimes):
                                         
-                                        sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE)
+                                        sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE, Poisson = True)
                                         #sampled_hits_withPE = updated_hits_withPE
                                         LAPPD_Hit_2D_sampled, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1)
                                         

@@ -263,14 +263,15 @@ def sample_PE_Poisson(LAPPD_Hit_2D):
     return LAPPD_Hit_2D_sampled
 
 
-def sample_updatedHits_PE_Poisson(hits_withPE):
+def sample_updatedHits_PE_Poisson(hits_withPE, Poisson = True):
     sampled_hits_withPE = []
     for step in range(len(hits_withPE)):
         sampled_hits_withPE.append([])
         for hit in hits_withPE[step]:
             LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe = hit
             sampled_pe = np.random.poisson(weighted_pe)
-            #sampled_pe = weighted_pe
+            if(Poisson == False):
+                sampled_pe = weighted_pe
             if(sampled_pe != 0):
                 sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
     return sampled_hits_withPE
