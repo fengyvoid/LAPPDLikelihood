@@ -64,7 +64,14 @@ if __name__ == "__main__":
             print(f"Create directory: {path}")
 
         
-    root_file_pattern = beam_data_path + 'ANNIETree_MC_withLAPPD.root'
+    root_file_pattern = beam_data_path + 'ANNIETree_MC_2_0.root'
+    
+    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_37_16.root'
+    
+    SelectEntry = True
+    entry = 131
+    entry_start = entry-5
+    entry_end = entry+5
 
     file_list = np.sort(glob.glob(root_file_pattern))
 
@@ -88,10 +95,10 @@ if __name__ == "__main__":
     cut_muonTrack = True
     cut_noVeto = False
     cut_MRDPMTCoinc = True
-    cut_ChrenkovCover = True
+    cut_ChrenkovCover = False
     cut_ChrenkovCover_nPMT = 4
     cut_ChrenkovCover_PMT_PE = 5
-    cut_LAPPDMultip = True
+    cut_LAPPDMultip = False
     cut_LAPPDHitAmp = 5
     cut_LAPPDHitNum = 7
 
@@ -99,9 +106,9 @@ if __name__ == "__main__":
     # for MC root tree
     cut_LAPPDTubeID = True
     TargetTubeID = [1244]
-    cut_HitPENumber = True
+    cut_HitPENumber = False
     HitPENumber = 20
-    cut_TotalLAPPDHitPE = True
+    cut_TotalLAPPDHitPE = False
     TotalLAPPDHitPE = 200
 
 
@@ -110,7 +117,7 @@ if __name__ == "__main__":
 
 
     muon_step = 0.01 # in meter
-    muon_prop_steps = 300 # max number
+    muon_prop_steps = 500 # max number
     muon_start_Z = 1.2 # in meter
 
     #########################################
@@ -126,8 +133,8 @@ if __name__ == "__main__":
 
     # make some LAPPD grids
     #LAPPD_Centers = [[0,-0.2255,2.951], [-0.898, -0.2255 + 0.5, 2.579], [0.898, -0.2255 - 0.5 , 2.579]]
-    LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
-    LAPPD_Centers = [[0,0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position
+    #LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
+    LAPPD_Centers = [[0,0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
 
     LAPPD_Directions = [[0,0,-1], [1,0,-1], [-1,0,-1]]
     LAPPD_stripWidth = 0.462
@@ -190,10 +197,13 @@ if __name__ == "__main__":
         for i in tqdm(range(processStartEntry, tree.GetEntries())):
             tree.GetEntry(i)
             totalNumOfEvent += 1
-            
-            #########
+            ########
 
             processThisEntry = True 
+            
+            if SelectEntry:
+                if i < entry_start or i > entry_end:
+                    processThisEntry = False
 
             if cut_clusterExist:
                 if tree.numberOfClusters < 1:
@@ -358,11 +368,11 @@ if __name__ == "__main__":
                 
                 
                 ######## set some test parameters
-                x_step = 4
+                x_step = 0
                 x_step_size = 0.03
-                y_step = 4
+                y_step = 0
                 y_step_size = 0.03
-                theta_step = 1
+                theta_step = 0
                 theta_step_size = np.radians(1)  # 转换成弧度
                 phi_step = 0
                 phi_step_size = np.radians(1)  # 转换成弧度
@@ -370,9 +380,6 @@ if __name__ == "__main__":
                 
                 # testing projection
                 print("Event number ", totalNumOfEvent)
-                if(totalNumOfEvent==430 or totalNumOfEvent==248):
-                    continue
-                
                 
                 mu_direction = [tree.trueDirX, tree.trueDirY, tree.trueDirZ]
                 mu_direction = mu_direction/np.linalg.norm(mu_direction)
@@ -407,6 +414,7 @@ if __name__ == "__main__":
                         # 遍历theta和phi，调整Muon方向
                         for theta_offset in range(-theta_step, theta_step + 1):
                             for phi_offset in range(-phi_step, phi_step + 1):
+                                best_totalPE =0
                                 loop_index+=1
                                 print("Calculating step x: ", x_offset+x_step, " y: ", y_offset+y_step, ". Total steps: ", loop_index, "/", TotalStepNum)
                                 # 计算新的theta和phi
@@ -423,6 +431,7 @@ if __name__ == "__main__":
                                 mu_positions = [pos for pos in mu_positions if (pos[2] < 3)]
                                 
                                 print("While Looping:")
+                                print("Muon steps: ", len(mu_positions))
                                 print("Muon start position: ", new_start_position)
                                 print("Muon direction: ", new_mu_direction)
                 
@@ -463,6 +472,7 @@ if __name__ == "__main__":
                                 for sample_i in range(sampleTimes):
                                     
                                     sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE)
+                                    #sampled_hits_withPE = updated_hits_withPE
                                     LAPPD_Hit_2D_sampled, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1)
 
                                     Sim_Waveforms_sampled = proj.generate_lappd_waveforms(LAPPD_Hit_2D_sampled, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
@@ -506,7 +516,10 @@ if __name__ == "__main__":
                     
                     
                 #print("Best fit hits: ", bestFitHits)
-                bestFitHits_converted = [[(int(a), int(b), int(c), float(d), float(e), int(f)) for (a, b, c, d, e, f) in sublist] for sublist in bestFitHits]
+                # bestFitHits_converted = [hits per particle step]
+                # for each hit:
+                # data format: updated_hits_withPE = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
+                bestFitHits_converted = [[(int(a), int(b), int(c), float(d), float(e), float(f)) for (a, b, c, d, e, f) in sublist] for sublist in bestFitHits]
                 output_peTXTFile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCPEInfo.txt'
                 with open(output_peTXTFile, 'w') as filetxt:
                     json.dump(bestFitHits_converted, filetxt)

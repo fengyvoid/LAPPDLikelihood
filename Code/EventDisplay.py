@@ -1058,15 +1058,53 @@ def DisplayHits(savePath, hits, LAPPD_grids):
     plt.close(fig)
 
 
-def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE = -1):
+def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE = -1, LAPPD_stripWidth = 0.462, LAPPD_stripSpace = 0.229):
     fig, axes = plt.subplots(2, 2, figsize=(20, 20))
     colors = cm.rainbow(np.linspace(0, 1, 30))
 
     tick_fontsize = 18
     label_fontsize = 18
     text_fontsize = 24
+    
+    LAPPD_gridSize = LAPPD_stripWidth + LAPPD_stripSpace
 
     # side 0 is bottom, side 1 is top
+    
+    # plot gradient
+    Data_PulseStart = []
+    Sim_PulseStart = []
+    Data_RecoHit = []
+    Sim_RecoHit = []
+    
+    for strip in range(28):
+        DWaveform_bottom = DataWaveform[strip, 0]
+        DWaveform_top = DataWaveform[strip, 1]
+        SWaveform_bottom = SimWaveform[strip][0]
+        SWaveform_top = SimWaveform[strip][1]
+        
+        D_bot_t = find_first_time_bin_above_threshold(DWaveform_bottom)
+        D_top_t = find_first_time_bin_above_threshold(DWaveform_top)
+        S_bot_t = find_first_time_bin_above_threshold(SWaveform_bottom, cut = (0,256))
+        S_top_t = find_first_time_bin_above_threshold(SWaveform_top, cut = (0,256))
+        
+        #if D_bot_t != none:
+        if(D_bot_t != None and D_top_t != None):
+            Data_T = (strip, D_top_t , D_bot_t)
+            Data_PulseStart.append(Data_T)
+            hit_t = calculate_gradient_hit_time(Data_T, LAPPD_gridSize)
+            Data_RecoHit.append((strip, hit_t))
+            
+        if(S_bot_t != None and S_top_t != None):
+            Sim_T = (strip, S_top_t, S_bot_t)
+            Sim_PulseStart.append(Sim_T)
+            hit_t = calculate_gradient_hit_time(Sim_T, LAPPD_gridSize)
+            Sim_RecoHit.append((strip, hit_t))
+            
+    print(" ")
+    print("Data_RecoHit=", Data_RecoHit)
+    print("Sim_RecoHit=", Sim_RecoHit)
+    print("    ")
+    
 
     # Plotting DataWaveform, side 0
     for strip in range(28):
@@ -1126,3 +1164,25 @@ def plotWaveforms(SavePath, DataWaveform, SimWaveform, xlim, SimPE = -1, DataPE 
 
 
 
+# find the time bin where the waveform first exceeds a threshold, up to 10 ps level
+def find_first_time_bin_above_threshold(waveform, threshold=7, cut = (150,250)):
+    waveform = waveform[cut[0]:cut[1]]
+    for i in range(1, len(waveform)):
+        if waveform[i] >= threshold:
+            # 对 bin[i-1] 和 bin[i] 之间进行线性插值
+            y1, y2 = waveform[i-1], waveform[i]
+            x1, x2 = (i-1) * 0.1, i * 0.1  # 每个 bin 对应 0.1 ns
+            if y2 != y1:  
+                interpolated_time_ns = x1 + (threshold - y1) * (x2 - x1) / (y2 - y1)
+            else:
+                interpolated_time_ns = x1  # 如果两个点相同，直接取x1
+                
+            #print(f"Interpolated time: {interpolated_time_ns}")
+            return interpolated_time_ns+cut[0]*0.1
+    return None 
+
+def calculate_gradient_hit_time(pulse_Ts, LAPPD_gridSize):
+    strip, top_t, bot_t = pulse_Ts
+    reco_time = 0.5 * ((top_t + bot_t) - (28*LAPPD_gridSize/(0.567*(2.998e8))))
+    return reco_time
+    

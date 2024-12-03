@@ -229,6 +229,7 @@ def generate_crossTalk_for_strip(hit_list, delay, amplitude, sigma, LAPPD_gridSi
     return waveform
 
 def weightedGain(pe_num):
+    # Todo!
     # Calculate the total gain corresponding to the number of PEs using an empirically estimated formula and a constant gain.
     # The basic assumption is:
     # 1. One pore can only discharge once for inserted PEs within ~ns time scale
@@ -269,6 +270,7 @@ def sample_updatedHits_PE_Poisson(hits_withPE):
         for hit in hits_withPE[step]:
             LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe = hit
             sampled_pe = np.random.poisson(weighted_pe)
+            #sampled_pe = weighted_pe
             if(sampled_pe != 0):
                 sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
     return sampled_hits_withPE
@@ -287,6 +289,7 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1):
         for j in range(len(hits_withPE[i])):
             # just loop all hits
             # for each strip, i.e. same x position but different y position
+            # first_index, second_index
             # each second index is a strip, loop the first index to get all positions on that strip
             LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
             totalPE+=hits_withPE[i][j][5]
@@ -305,7 +308,7 @@ def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize,
 
     for hit in hit_list:
         hit_y, hit_time, hit_pe = hit
-        #hit_pe = weightedGain(hit_pe)
+        hit_pe = weightedGain(hit_pe)
         y_pos = (hit_y+0.5) * LAPPD_gridSize  # hit_y 为 strip index，需要转换为坐标
         if hit_time is None or hit_time ==0:
             continue
@@ -332,7 +335,7 @@ def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize,
     return waveform
 
 
-def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace):
+def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True):
     LAPPD_waveforms_AllLAPPDs = []
     LAPPD_gridSize = LAPPD_stripWidth + LAPPD_stripSpace
     speed_of_light = 2.998e8  # 光速
@@ -365,22 +368,22 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
                 LAPPD_waveforms[x][0] += waveform_down
                 LAPPD_waveforms[x][1] += waveform_up
 
+                if(generateCrossTalk):
+                    for cros in range(28):
+                        if cros == x:
+                            continue
 
-                for cros in range(28):
-                    if cros == x:
-                        continue
+                        dStrip = abs(cros-x)
 
-                    dStrip = abs(cros-x)
+                        delay = max_pulse_time + dStrip * crossTalk_TimeDelay # in ns
+                        amplitude = max(sPEPulseAmp)*crossTalk_Amp # in mV
+                        sigma = 0.48+0.036*dStrip # in ns
 
-                    delay = max_pulse_time + dStrip * crossTalk_TimeDelay # in ns
-                    amplitude = max(sPEPulseAmp)*crossTalk_Amp # in mV
-                    sigma = 0.48+0.036*dStrip # in ns
+                        crossTalk_down = generate_crossTalk_for_strip(hits_here, delay, amplitude, sigma, LAPPD_gridSize, "down")
+                        crossTalk_up = generate_crossTalk_for_strip(hits_here, delay, amplitude, sigma, LAPPD_gridSize, "up")
 
-                    crossTalk_down = generate_crossTalk_for_strip(hits_here, delay, amplitude, sigma, LAPPD_gridSize, "down")
-                    crossTalk_up = generate_crossTalk_for_strip(hits_here, delay, amplitude, sigma, LAPPD_gridSize, "up")
-
-                    LAPPD_waveforms[cros][0] += crossTalk_down
-                    LAPPD_waveforms[cros][1] += crossTalk_up
+                        LAPPD_waveforms[cros][0] += crossTalk_down
+                        LAPPD_waveforms[cros][1] += crossTalk_up
 
         # now, the first index of LAPPD_waveforms is the x index of LAPPD_grids
         # but, the grid is in corrdinate direction, not the real view direction
@@ -425,10 +428,9 @@ def align_waveforms(Sim_Waveform, Data_Waveform, SimRange=(0, 100), shiftRange=(
                 # Calculate the sum of absolute differences
                 diff = 0
                 for i in range(len(data_waveform_to_compare)):
-                    scaling = data_waveform_to_compare[i]**3
+                    scaling = data_waveform_to_compare[i]**2
                     #scaling = 1
                     diff += np.abs(data_waveform_to_compare[i] - sim_cut_waveform[i]) * np.abs(scaling)
-
                 
                 # Accumulate the differences
                 total_diff += diff

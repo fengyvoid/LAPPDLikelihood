@@ -105,6 +105,8 @@ if __name__ == '__main__':
     # make some LAPPD grids
     #LAPPD_Centers = [[0,-0.2255,2.951], [-0.898, -0.2255 + 0.5, 2.579], [0.898, -0.2255 - 0.5 , 2.579]]
     LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
+    #LAPPD_Centers = [[0,0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position
+
     LAPPD_Directions = [[0,0,-1], [1,0,-1], [-1,0,-1]]
     LAPPD_stripWidth = 0.462
     LAPPD_stripSpace = 0.229
@@ -313,7 +315,7 @@ if __name__ == '__main__':
 
                 
                 # testing projection
-                print("Event number ", totalNumOfEvent)
+                print("Event number", totalNumOfEvent)
                 for mu_track_i in range (len(tree.MRDTrackStopX)):
                     #print("Projection muon track number ", mu_track_i, "trackStopX", tree.MRDTrackStopX, "trackStartX", tree.MRDTrackStartX)
                     mu_direction = [tree.MRDTrackStopX[mu_track_i] - tree.MRDTrackStartX[mu_track_i], tree.MRDTrackStopY[mu_track_i] - tree.MRDTrackStartY[mu_track_i], tree.MRDTrackStopZ[mu_track_i] - tree.MRDTrackStartZ[mu_track_i]]
@@ -325,8 +327,11 @@ if __name__ == '__main__':
                     y_at_z = tree.MRDTrackStartY[mu_track_i] - scale_factor * mu_direction[1]
                     muon_fit_start_position = [x_at_z, y_at_z, muon_start_Z]
                     
-                    print("Muon start position: ", muon_fit_start_position)
-                    print("Muon direction: ", mu_direction)
+                    #print("Muon start position: ", muon_fit_start_position)
+                    #print("Muon direction: ", mu_direction)
+                    
+                    print("TVector3 Muon_start_position (", muon_fit_start_position[0],",",muon_fit_start_position[1],",",muon_fit_start_position[2],");")
+                    print("TVector3 Muon_direction (",mu_direction[0],",",mu_direction[1],",",mu_direction[2],");")
                     
                     ##############################################
                     ######## To loop the likelihood, add different muon position and direction here, then make the mu positions
@@ -339,10 +344,13 @@ if __name__ == '__main__':
                     
                     TotalStepNum = (2*x_step+1)*(2*y_step+1)*(2*theta_step+1)*(2*phi_step+1)
                     loop_index = 0
+                    
+                    SimPE = 0
 
                     
                     for x_offset in range(-x_step, x_step + 1):
                         for y_offset in range(-y_step, y_step + 1):
+                            best_totalPE = 0
                             # 计算新的x, y坐标
                             x_at_z = muon_fit_start_position[0] + x_offset * x_step_size
                             y_at_z = muon_fit_start_position[1] + y_offset * y_step_size
@@ -389,9 +397,40 @@ if __name__ == '__main__':
                                     # data format: updated_hits_withPE = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
                                     #loop first index gives different y
                                     #loop second index gives different x
-
-
+                                    
+                                    sampleTimes = 1
+                                    
+                                    min_diff_best = float('inf')
+                                    best_shiftDT = 0
+                                    
+                                    for sample_i in range(sampleTimes):
+                                        
+                                        sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE)
+                                        #sampled_hits_withPE = updated_hits_withPE
+                                        LAPPD_Hit_2D_sampled, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1)
+                                        
+                                        Sim_Waveforms_sampled = proj.generate_lappd_waveforms(LAPPD_Hit_2D_sampled, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True)
+                                        shiftDT_sampled, min_diff_sampled, waveform_diff_sampled, Sim_Waveform_shifted_sampled = proj.align_waveforms(Sim_Waveforms_sampled[0], Data_Waveform, SimRange=(0, 100), shiftRange=(100, 200))
+                                        
+                                        print("Sample times: ", sample_i, ", Min diff: ", min_diff_sampled, ", Total PE: ", totalPE)
+                                        
+                                        if(min_diff_sampled < min_diff_best):
+                                            min_diff_best = min_diff_sampled
+                                            bestResultWaveform = Sim_Waveform_shifted_sampled
+                                            bestFitHits = sampled_hits_withPE
+                                            best_totalPE = totalPE
+                                            SimPE = totalPE
+                                            best_shiftDT = shiftDT_sampled
+                                            
+                                    print("Shifted DT: ", best_shiftDT, " Min diff: ", min_diff_best)
+                                    print("Total PE: ", best_totalPE)
+                                    
+                                    
+                                    TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff_best, best_totalPE])
+                                    
+                                    '''
                                     totalPE = 0
+                                    
 
                                     LAPPD_Hit_2D = []
                                     for i in range (1):
@@ -426,19 +465,25 @@ if __name__ == '__main__':
                                         bestFitHits = updated_hits_withPE
                                     
                                     TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff, totalPE])
+                                    '''
                     
-                    print("Best fit result: ", TotalFitResult)
+                    #print("Best fit result: ", TotalFitResult)
                     output_txtfile = plot_save_path+'Event' + str(totalNumOfEvent) +'output.txt'
-
-
                     with open(output_txtfile, 'w') as filetxt:
                         json.dump(TotalFitResult, filetxt)
+                        
+                        
+                    bestFitHits_converted = [[(int(a), int(b), int(c), float(d), float(e), float(f)) for (a, b, c, d, e, f) in sublist] for sublist in bestFitHits]
+                    output_peTXTFile = plot_save_path+'Event' + str(totalNumOfEvent) +'_PEInfo.txt'
+                    with open(output_peTXTFile, 'w') as filetxt:
+                        json.dump(bestFitHits_converted, filetxt)     
     
                     
                     plotName = plot_save_path + 'Event' + str(totalNumOfEvent) + '_MuonTrack' + str(mu_track_i) + 'waveform.png'
                     #ed.plotWaveforms(plotName, Data_Waveform, bestResultWaveform, (0,256))
+                    ed.plotWaveforms(plotName, Data_Waveform, bestResultWaveform, (0,256), SimPE = SimPE, DataPE = 0)
                     plotName2D = plot_save_path + 'Event' + str(totalNumOfEvent) + '_MuonTrack' + str(mu_track_i) + '2D.png'
-                    #ed.DisplayHits(plotName2D, bestFitHits, LAPPD_grids)
+                    ed.DisplayHits(plotName2D, bestFitHits, LAPPD_grids)
                     
 
                 passCutEventNum += 1
