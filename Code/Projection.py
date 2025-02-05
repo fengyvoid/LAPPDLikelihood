@@ -5,6 +5,7 @@ from tqdm import tqdm
 import pandas as pd
 from scipy.interpolate import interp1d
 from scipy import interpolate
+import math
 
 def process_photon_hits(particle_position, particle_direction, LAPPD_grids, 
                         tolerance=0.007, PMTPosition=[(0.26489847,0.01038878,2.72413225, 0.254/2), (-0.2666204,0.00990167,2.72809739, 0.254/2), 
@@ -276,7 +277,7 @@ def sample_updatedHits_PE_Poisson(hits_withPE, Poisson = True):
                 sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
     return sampled_hits_withPE
 
-def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1):
+def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = False):
     LAPPD_Hit_2D = []
     totalPE = 0
     
@@ -292,11 +293,411 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1):
             # for each strip, i.e. same x position but different y position
             # first_index, second_index
             # each second index is a strip, loop the first index to get all positions on that strip
-            LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
+            if(hits_withPE[i][j][0]>=number_of_LAPPDs):
+                continue
+            if(reSampled):
+                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][6]))
+            else:
+                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
             totalPE+=hits_withPE[i][j][5]
             
     return LAPPD_Hit_2D, totalPE
 
+
+
+def poisson_pmf(k, lam):
+    """
+    计算泊松分布 P(X = k) = lam^k * e^(-lam) / k!
+    为避免直接计算 k! 可能导致浮点下溢/溢出，使用对数形式，然后再用 exp。
+    """
+    if k < 0 or lam <= 0:
+        return 0.0
+    # log P(X=k) = k*log(lam) - lam - log(k!)
+    log_p = k * math.log(lam) - lam - math.lgamma(k + 1)
+    return math.exp(log_p)
+
+def calculate_pe_probability(lappd_data):
+    all_hits = []
+    for second_idx in range(len(lappd_data)):
+        for hit in lappd_data[second_idx]:
+            all_hits.append(hit)
+            
+    total_PE = sum(hit[2] for hit in all_hits)
+    total_probability = 1.0
+    for i, hit in enumerate(all_hits):
+        lam = hit[2]           # expectedPE
+        if(lam == 0):
+            continue
+        p_i = poisson_pmf(lam, lam)
+        #print("p_i: ", p_i,", lam: ", lam)
+        total_probability *= p_i
+        
+    hitNum = len(all_hits)
+
+    return total_PE, total_probability, hitNum
+
+
+def distribute_pe_for_lappd(lappd_data):
+    """
+    针对单个 LAPPD 的所有 hit，基于“整体概率(所有 hit 的 pmf 乘积)最优”的思路分配光电子。
+    lappd_data: 形如:
+      [
+        [ (y, time, expectedPE, sampledPE), ... ],  # second_index=0
+        [ (y, time, expectedPE, sampledPE), ... ],  # second_index=1
+        ...
+      ]
+
+    最终会把每个命中的 (y, time, expectedPE, sampledPE) 改写成 (y, time, allocatedPE)。
+    
+    返回:
+      total_alloc_pe: 当前 LAPPD 最终分配的光电子总数（allocatedPE 之和）。
+    """
+    total_alloc_pe = 0
+    total_probability = 1
+    total_hitNum = 0
+
+    # ========== 1) 拉平所有 hit ==========
+    all_hits = []
+    for second_idx in range(len(lappd_data)):
+        for hit in lappd_data[second_idx]:
+            # hit = (y, time, expectedPE, sampledPE)
+            all_hits.append(hit)
+
+    # 若该 LAPPD 下没有 hit，就返回 0
+    if len(all_hits) == 0:
+        return 0, 1, 0
+
+    # ========== 2) 计算总期望值, 得到需要分配的总 PE (取 round) ==========
+    totalExp = sum(hit[2] for hit in all_hits)
+    totalPEToAllocate = round(totalExp)
+
+    # ========== 3) 每个 hit 初始分配为 round(expectedPE) ==========
+    allocatedPE = [round(hit[2]) for hit in all_hits]
+    sumAlloc = sum(allocatedPE)
+    increments = totalPEToAllocate - sumAlloc  # 还需要“+1”的次数
+
+    # 如果初始分配全是 0，但 totalPEToAllocate > 0，则先给期望值最大的 hit +1
+    if sumAlloc == 0 and totalPEToAllocate > 0:
+        max_idx = None
+        max_expected = float("-inf")
+        for i, hit in enumerate(all_hits):
+            lam = hit[2]
+            if lam > max_expected:
+                max_expected = lam
+                max_idx = i
+        allocatedPE[max_idx] = 1
+        sumAlloc = 1
+        increments = totalPEToAllocate - sumAlloc
+
+    # ========== 4) 循环分配剩余 increments 个 PE ==========
+    for _ in range(increments):
+        best_ratio = float("-inf")
+        best_idx = None
+        
+        for i, hit in enumerate(all_hits):
+            lam = hit[2]
+            k_cur = allocatedPE[i]
+            
+            # 如果 pmf(k_cur, lam)=0，也就无法算比值(或比值=∞, 但通常表示不可行)
+            base_p = poisson_pmf(k_cur, lam)
+            if base_p <= 0:
+                continue
+            
+            # 计算 ratio = pmf(k_cur+1, lam) / pmf(k_cur, lam)
+            new_p = poisson_pmf(k_cur + 1, lam)
+            ratio = new_p / base_p  # 可能 <1, =1, 或 >1
+
+            # 选 ratio 最大的那个
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_idx = i
+
+        # 如果所有 hit 的 base_p=0 或都 lam=0, best_idx 可能仍是 None
+        # 这里简单处理：若找不到可分配，就中断
+        if best_idx is None:
+            break
+
+        # 给找到的 best_idx 分配 +1
+        allocatedPE[best_idx] += 1
+
+    # ========== 5) 看能否再加 1 让整体概率提升？ ==========
+    for i, hit in enumerate(all_hits):
+        lam = hit[2]
+        k_cur = allocatedPE[i]
+        base_p = poisson_pmf(k_cur, lam)
+        if base_p <= 0:
+            continue
+        new_p = poisson_pmf(k_cur + 1, lam)
+        ratio = new_p / base_p
+        if ratio > 1:
+            allocatedPE[i] += 1
+
+    # ========== 6) 写回分配好的 PE ==========
+    idx = 0
+    for second_idx in range(len(lappd_data)):
+        for j in range(len(lappd_data[second_idx])):
+            y, time, _, _ = lappd_data[second_idx][j]
+            lappd_data[second_idx][j] = (y, time, allocatedPE[idx])
+            idx += 1
+            
+    total_probability = 1.0
+    for i, hit in enumerate(all_hits):
+        lam = hit[2]           # expectedPE
+        k_cur = allocatedPE[i] # 分配得到的光电子
+        p_i = poisson_pmf(k_cur, lam)
+        if(p_i != 0 and lam == 0):
+            total_probability *= p_i
+
+    total_alloc_pe = sum(allocatedPE)
+    total_hitNum = len(all_hits)
+    
+    #print("Got result: ", total_alloc_pe, total_probability, total_hitNum)
+    return total_alloc_pe, total_probability, total_hitNum
+
+
+
+def convertToHit_2D_exped(hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = False):
+    """
+    使用贪心法，将 hits_withPE 里的光电子数 (PE) 分配到 LAPPD_Hit_2D。
+    - hits_withPE: 形如 [ [ (LAPPD_idx, y, x, time, photon_dist, expected_PE, sampled_PE), ... ],
+                           [ ... ],
+                           ...
+                         ]
+      其中最外层 list 的长度对应“若干步”或“事件数量”。
+    - number_of_LAPPDs: LAPPD 个数，默认为 1。
+
+    返回值:
+      LAPPD_Hit_2D: 形如 [ [ [ (y, time, allocated_PE), (y, time, allocated_PE), ...],  # second_index=0
+                             ...
+                           ],  # LAPPD_idx=0
+                           [ ... ],  # LAPPD_idx=1
+                           ...
+                         ]
+      total_pe_list: 一个长度为 number_of_LAPPDs 的数组，表示每个 LAPPD 分配完成后的总 PE。
+    """
+    # 1) 初始化空结构: 每个 LAPPD -> 28 个 second_index
+    LAPPD_Hit_2D = []
+    for _ in range(number_of_LAPPDs):
+        lappd_data = [[] for __ in range(28)]  # 28 行，每行装若干 hit
+        LAPPD_Hit_2D.append(lappd_data)
+
+    # 2) 填充 LAPPD_Hit_2D，先存 (y, time, expectedPE, sampledPE)
+
+    for stepN, step_hits in enumerate(hits_withPE):
+        for hit in step_hits:
+            LAPPD_idx, y_idx, x_idx, hit_time, photon_distance, expectedPE, sampledPE = hit
+            if LAPPD_idx >= number_of_LAPPDs:
+                continue
+            # 将 hit 放到对应 LAPPD、对应 x_idx (second_index) 的列表里
+            if usingExpectedPEForEachHit:
+                LAPPD_Hit_2D[LAPPD_idx][x_idx].append((y_idx, hit_time, expectedPE))
+            else:
+                LAPPD_Hit_2D[LAPPD_idx][x_idx].append((y_idx, hit_time, expectedPE, sampledPE))
+
+    
+    total_pe_list = []
+    total_probability_list = []
+    total_hitNum_list = []
+    # 3) 对每个 LAPPD 内部做贪心分配，并收集 total PE
+    if( not usingExpectedPEForEachHit):
+        for i in range(number_of_LAPPDs):
+            total_alloc_pe, total_probability, hitNum = distribute_pe_for_lappd(LAPPD_Hit_2D[i])
+            total_pe_list.append(total_alloc_pe)
+            total_probability_list.append(total_probability)
+            total_hitNum_list.append(hitNum)
+    else:
+        # calculate the pe list and probability list, without redistribute the PE
+        for i in range(number_of_LAPPDs):
+            pe, probability, hitNum = calculate_pe_probability(LAPPD_Hit_2D[i])
+            total_pe_list.append(pe)
+            total_probability_list.append(probability)
+            total_hitNum_list.append(hitNum)
+
+    #print(LAPPD_Hit_2D[0])
+    
+    return LAPPD_Hit_2D, total_pe_list, total_probability_list, total_hitNum_list
+
+def convertToHit_2D_perTimeSlice_exp(hits_withPE, number_of_LAPPDs = 1, sliceInterval = 10, usingExpectedPEForEachHit = False):
+    # with given hits_withPE, convert it to LAPPD_Hit_2D, and calculate the total PE for each LAPPD
+    # but, redistribute the PE for each time slice
+    # for all hits on an LAPPD in a time interval, devide it into n intervals, and redistribute the PE in each interval
+    
+    LAPPD_Hit_2D = []
+    for _ in range(number_of_LAPPDs):
+        lappd_data = [[] for __ in range(28)] 
+        LAPPD_Hit_2D.append(lappd_data)
+    
+    Final_LAPPD_Hit_2D_thisID = []
+    Final_total_pe_list = []
+    Final_total_probability_list = []
+    Final_total_hitNum_list = []  
+    
+    for LID in range(len(hits_withPE)):
+        if LID >= number_of_LAPPDs:
+            continue
+        hits_AllStep_thisID = []
+        AllHitTime = []
+        for s in range(len(hits_withPE)):
+            hits_AllStep_thisID.append([])
+        for stepN, step_hits in enumerate(hits_withPE):
+            for hit in step_hits:
+                LAPPD_idx, y_idx, x_idx, hit_time, _, expectedPE, sampledPE = hit
+                AllHitTime.append(hit_time)
+                if LAPPD_idx != LID:
+                    continue
+                hits_AllStep_thisID[stepN].append(hit)
+        
+
+        # now, hits_AllStep_thisID only contains the hits for this LAPPD
+        # find the min and max time    
+        minArrivalTime = 0
+        maxArrivalTime = 0  
+        if len(AllHitTime) != 0:
+            minArrivalTime = min(AllHitTime)*1e9
+            maxArrivalTime = max(AllHitTime)*1e9
+        timeStep = (maxArrivalTime - minArrivalTime) / sliceInterval
+        print("minArrivalTime: ", minArrivalTime, "maxArrivalTime: ", maxArrivalTime, "timeStep: ", timeStep)
+        total_pe_thisID = 0
+        total_probability_thisID = 1
+        total_hitNum_thisID = 0
+        
+        LAPPD_Hit_2D_thisID = [[] for __ in range(28)]
+        tStep = 0
+        while tStep < sliceInterval:
+            #print("Start tStep: ", tStep)
+
+            LAPPD_Hit_2D_thisTimeStep = [[] for __ in range(28)]
+            
+            addedhit = 0
+            addedPE = 0
+
+            while addedPE < 1 and tStep < sliceInterval:
+                startTime_thisStep = minArrivalTime + tStep * timeStep
+                endTime_thisStep = minArrivalTime + (tStep+1) * timeStep
+                for muStep in range(len(hits_AllStep_thisID)):
+                    hits = hits_AllStep_thisID[muStep]
+                    if len(hits) == 0:
+                        continue
+                    for hit in hits:
+                        LAPPD_idx, y_idx, x_idx, hit_time, _, expectedPE, sampledPE = hit
+                        if hit_time*1e9 >= startTime_thisStep and hit_time*1e9 < endTime_thisStep:
+                            sampledPE = round(sampledPE)
+                            if usingExpectedPEForEachHit:
+                                LAPPD_Hit_2D_thisTimeStep[x_idx].append((y_idx, hit_time, expectedPE))
+                                addedPE += expectedPE
+                                addedhit += 1
+                            else:
+                                LAPPD_Hit_2D_thisTimeStep[x_idx].append((y_idx, hit_time, expectedPE, sampledPE))
+                                addedPE += expectedPE
+                                addedhit += 1
+                tStep += 1
+                #print("ts",tStep, "added Hit: ", addedhit, "added PE: ", addedPE) 
+            
+            #print("Finish tStep: ", tStep, "added Hit: ", addedhit, "added PE: ", addedPE)
+            alloc_pe = 0
+            probability = 1
+            hitNum = 0
+            if not usingExpectedPEForEachHit:
+                alloc_pe, probability, hitNum = distribute_pe_for_lappd(LAPPD_Hit_2D_thisTimeStep)
+            else:
+                alloc_pe, probability, hitNum = calculate_pe_probability(LAPPD_Hit_2D_thisTimeStep)
+                
+            total_pe_thisID += alloc_pe
+            total_probability_thisID *= probability
+            total_hitNum_thisID += hitNum
+            
+            # now merge the LAPPD_Hit_2D_thisTimeStep into the final LAPPD_Hit_2D_thisID
+            for strip in range(28):
+                LAPPD_Hit_2D_thisID[strip] += LAPPD_Hit_2D_thisTimeStep[strip]
+                #for hit in LAPPD_Hit_2D_thisTimeStep[strip]:
+                    #y_idx, hit_time, sampledPE = hit
+                    #if sampledPE != 0:
+                    #    print(strip, hit)
+            tStep += 1
+                    
+        Final_LAPPD_Hit_2D_thisID.append(LAPPD_Hit_2D_thisID)
+        Final_total_pe_list.append(total_pe_thisID)
+        Final_total_probability_list.append(total_probability_thisID)
+        Final_total_hitNum_list.append(total_hitNum_thisID)
+        
+    return Final_LAPPD_Hit_2D_thisID, Final_total_pe_list, Final_total_probability_list, Final_total_hitNum_list
+
+def convertToHit_2D_perStepSlice_exp(hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = False):
+    # with given hits_withPE, convert it to LAPPD_Hit_2D, and calculate the total PE for each LAPPD
+    # but, redistribute the PE for each particle step
+    
+    LAPPD_Hit_2D = []
+    for _ in range(number_of_LAPPDs):
+        lappd_data = [[] for __ in range(28)] 
+        LAPPD_Hit_2D.append(lappd_data)
+    
+    Final_LAPPD_Hit_2D_thisID = []
+    Final_total_pe_list = []
+    Final_total_probability_list = []
+    Final_total_hitNum_list = []
+           
+    for LID in range(len(hits_withPE)):
+        if LID >= number_of_LAPPDs:
+            continue
+        
+        hits_AllStep_thisID = []
+        for s in range(len(hits_withPE)):
+            hits_AllStep_thisID.append([])
+        
+        for stepN, step_hits in enumerate(hits_withPE):
+            for hit in step_hits:
+                LAPPD_idx, y_idx, x_idx, hit_time, _, expectedPE, sampledPE = hit
+                if LAPPD_idx != LID:
+                    continue
+                hits_AllStep_thisID[stepN].append(hit)
+        
+        # now, hits_AllStep_thisID only contains the hits for this LAPPD
+        # for each step, put them into a new LAPPD_Hit_2D, run the maximize probability function, then put them in to the final LAPPD_Hit_2D
+        total_pe_thisID = 0
+        total_probability_thisID = 1
+        total_hitNum_thisID = 0
+        
+        LAPPD_Hit_2D_thisID = [[] for __ in range(28)]
+        
+        for step in range(len(hits_AllStep_thisID)):
+            hits = hits_AllStep_thisID[step]
+            if len(hits) == 0:
+                continue
+            LAPPD_Hit_2D_thisStep = [[] for __ in range(28)]
+            for hit in hits:
+                LAPPD_idx, y_idx, x_idx, hit_time, _, expectedPE, sampledPE = hit
+                sampledPE = round(sampledPE)
+                if usingExpectedPEForEachHit:
+                    LAPPD_Hit_2D_thisStep[x_idx].append((y_idx, hit_time, expectedPE))
+                else:
+                    LAPPD_Hit_2D_thisStep[x_idx].append((y_idx, hit_time, expectedPE, sampledPE))
+            
+            alloc_pe = 0
+            probability = 1
+            hitNum = 0
+            if not usingExpectedPEForEachHit:
+                alloc_pe, probability, hitNum = distribute_pe_for_lappd(LAPPD_Hit_2D_thisStep)
+            else:
+                alloc_pe, probability, hitNum = calculate_pe_probability(LAPPD_Hit_2D_thisStep)
+                
+            total_pe_thisID += alloc_pe
+            total_probability_thisID *= probability
+            total_hitNum_thisID += hitNum
+            
+            # now merge the LAPPD_Hit_2D_thisStep into the final LAPPD_Hit_2D_thisID
+            for strip in range(28):
+                LAPPD_Hit_2D_thisID[strip] += LAPPD_Hit_2D_thisStep[strip]
+                for hit in LAPPD_Hit_2D_thisStep[strip]:
+                    y_idx, hit_time, sampledPE = hit
+                    #if sampledPE != 0:
+                    #    print(strip, hit)
+                
+        Final_LAPPD_Hit_2D_thisID.append(LAPPD_Hit_2D_thisID)
+        Final_total_pe_list.append(total_pe_thisID)
+        Final_total_probability_list.append(total_probability_thisID)
+        Final_total_hitNum_list.append(total_hitNum_thisID)
+        
+    return Final_LAPPD_Hit_2D_thisID, Final_total_pe_list, Final_total_probability_list, Final_total_hitNum_list
 
 # 使用sPE和hit info来生成waveform
 def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize, speed_of_light, strip_direction):
@@ -336,8 +737,9 @@ def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize,
     return waveform
 
 
-def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True):
+def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True, generatePE = False):
     LAPPD_waveforms_AllLAPPDs = []
+    LAPPD_PEs_AllLAPPDs = []
     LAPPD_gridSize = LAPPD_stripWidth + LAPPD_stripSpace
     speed_of_light = 2.998e8  # 光速
 
@@ -348,6 +750,17 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
 
     index = np.argmax(sPEPulseAmp)
     max_pulse_time = sPEPulseTime[index]
+    
+    # calculate number of pe on each channel
+    # LAPPD_Hit_2D[LAPPD_idx][x_idx].append((y_idx, hit_time, expectedPE, sampledPE))
+    for lappd_hits in LAPPD_Hits_2D:
+        LAPPD_PE_perStrip = np.zeros(28)
+        for x in range(28):
+            #print("generating",x)
+            for hit in lappd_hits[x]:
+                LAPPD_PE_perStrip[x] += hit[2]
+            #print(LAPPD_PE_perStrip)
+        LAPPD_PEs_AllLAPPDs.append(LAPPD_PE_perStrip)
     
 
     for lappd_hits in LAPPD_Hits_2D:
@@ -395,8 +808,10 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
 
         LAPPD_waveforms_AllLAPPDs.append(flipped_LAPPD_waveforms)
 
-    return LAPPD_waveforms_AllLAPPDs
-
+    if(generatePE):
+        return LAPPD_waveforms_AllLAPPDs, LAPPD_PEs_AllLAPPDs
+    else:
+        return LAPPD_waveforms_AllLAPPDs
 
 
 

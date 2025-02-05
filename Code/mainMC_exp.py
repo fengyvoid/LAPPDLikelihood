@@ -7,6 +7,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from matplotlib.colors import ListedColormap
 from matplotlib.ticker import MaxNLocator
 import glob
+from natsort import natsorted
 import decimal
 from decimal import Decimal, getcontext
 import numpy as np
@@ -56,6 +57,7 @@ if __name__ == "__main__":
     beam_data_path = basePath + 'data/'
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
+    save_result_path = basePath + 'OptimizationResults/2.FixDir/'
 
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
@@ -67,16 +69,24 @@ if __name__ == "__main__":
             print(f"Create directory: {path}")
 
         
-    root_file_pattern = beam_data_path + 'ANNIETree_MC_2_1.root'
+    #root_file_pattern = beam_data_path + 'ANNIETree_MC_*.root'
     
-    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_37_16.root'
+    MCrunNumber = 95
+    MCSubRunNumber = 0
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_{MCrunNumber}_{MCSubRunNumber}.root'
     
-    SelectEntry = True
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/tree_95-99/mergedEventTree_95_0.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_*.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_ll_center_100.root'
+
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_rl_center_100.root'
+
+    SelectEntry = False
     entry = 131
     entry_start = entry-5
     entry_end = entry+5
+    file_list = natsorted(glob.glob(root_file_pattern))
 
-    file_list = np.sort(glob.glob(root_file_pattern))
 
     processStartEntry = 0
     processEventNumber = 1000
@@ -89,6 +99,8 @@ if __name__ == "__main__":
         pdf = PdfPages(plot_save_path + pdfName)
 
     # cuts to select events
+    # for MC data or beam
+    '''
     cut_beamOK = True
     cut_clusterExist = True
     cut_clusterCB = True
@@ -104,15 +116,33 @@ if __name__ == "__main__":
     cut_LAPPDMultip = False
     cut_LAPPDHitAmp = 5
     cut_LAPPDHitNum = 7
+    '''
+    
+    # for mono energy muon
+    cut_beamOK = False
+    cut_clusterExist = False
+    cut_clusterCB = False
+    cut_clusterCB_value = 0.2
+    cut_clusterMaxPE = False
+    cut_clusterMaxPE_value = 100
+    cut_muonTrack = False
+    cut_noVeto = False
+    cut_MRDPMTCoinc = False
+    cut_ChrenkovCover = False
+    cut_ChrenkovCover_nPMT = 4
+    cut_ChrenkovCover_PMT_PE = 5
+    cut_LAPPDMultip = False
+    cut_LAPPDHitAmp = 5
+    cut_LAPPDHitNum = 7
 
 
     # for MC root tree
     cut_LAPPDTubeID = True
     TargetTubeID = [1244]
-    cut_HitPENumber = False
-    HitPENumber = 20
-    cut_TotalLAPPDHitPE = False
-    TotalLAPPDHitPE = 200
+    cut_HitPENumber = True
+    HitPENumber = 40
+    cut_TotalLAPPDHitPE = True
+    TotalLAPPDHitPE = 100
 
 
     totalNumOfEvent = 0
@@ -137,7 +167,7 @@ if __name__ == "__main__":
     # make some LAPPD grids
     #LAPPD_Centers = [[0,-0.2255,2.951], [-0.898, -0.2255 + 0.5, 2.579], [0.898, -0.2255 - 0.5 , 2.579]]
     #LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
-    LAPPD_Centers = [[0,0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
+    LAPPD_Centers = [[0, 0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
 
     LAPPD_Directions = [[0,0,-1], [1,0,-1], [-1,0,-1]]
     LAPPD_stripWidth = 0.462
@@ -177,8 +207,11 @@ if __name__ == "__main__":
     sPE_pulse_time, sPE_pulse = li.read_spe_pulse_from_root(LAPPD_profile_path + "singlePETemplate_LAPPD40.root", "pos10_1_1D", 7)
 
 
+
     for fileName in file_list:
-        print('Processing file: ', fileName)
+        #print('Processing file: ', fileName)
+        if fileName == '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_17_15.root':
+            continue
 
         file = ROOT.TFile(fileName, "READ")
         tree = file.Get("Event")
@@ -196,10 +229,23 @@ if __name__ == "__main__":
         if processStartEntry >= tree.GetEntries():
             print("processStartEntry is larger than the total number of entries, set to entry number - 1:", tree.GetEntries()-1)
             processStartEntry = tree.GetEntries()-1
+            
+        tot = tree.GetEntries()
+        #print('Total number of events: ', tot)
 
-        for i in tqdm(range(processStartEntry, tree.GetEntries())):
+        #for i in tqdm(range(processStartEntry, tree.GetEntries())):
+        for i in range(processStartEntry, tree.GetEntries()):
             tree.GetEntry(i)
             totalNumOfEvent += 1
+            if totalNumOfEvent % 10000 == 0:
+                print('Processing event: ', totalNumOfEvent)
+            ########
+            
+            
+            FinalOptimizationResult = {}
+            save_result_Name = save_result_path + f'Result_{MCrunNumber}_{MCSubRunNumber}_Event_' + str(totalNumOfEvent) + '.h5'
+            
+            
             ########
 
             processThisEntry = True 
@@ -348,192 +394,145 @@ if __name__ == "__main__":
 
                 for index, x in enumerate(LHitXs_fit):
                     step = int((x - XStart) // LAPPD_gridSize)
-                    
                     if 0 <= step < 28:
-                        
                         YPos = LHitYs_fit[index]
                         YStep = int((YPos - YStart) // LAPPD_gridSize)
                         if 0 <= YStep < 28:
                             hit = (YStep, (LHitTimes_fit[index] % 25.0 + 5)*1e-9, 1)
                             LAPPD_MCHit_2D[0][step].append(hit)
             
-                #Data_Waveform = np.zeros((28, 2, 256))
-                #for strip in range(28):
-                #    print("LAPPD_MCHit_2D strip:", strip, LAPPD_MCHit_2D[0][strip])
-                #print(sPE_pulse_time, sPE_pulse)
+
                 Data_Waveform = proj.generate_lappd_waveforms(LAPPD_MCHit_2D, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
                 #Data_Waveform[LAPPD_id][strip number][0=dowm, 1=up][256]
-                
-                print("Data_Waveform:", len(Data_Waveform), len(Data_Waveform[0]), len(Data_Waveform[0][0]), len(Data_Waveform[0][0][0]))
-
+                #print("Data_Waveform:", len(Data_Waveform), len(Data_Waveform[0]), len(Data_Waveform[0][0]), len(Data_Waveform[0][0][0]))
                 #print("Data_Waveform:", Data_Waveform[0][10][0])
                 
                 ##############################################
                 ######## project the muon track to LAPPD #####
                 ##############################################
-                
-                
-                ######## set some test parameters
-                x_step = 0
-                x_step_size = 0.03
-                y_step = 0
-                y_step_size = 0.03
-                theta_step = 0
-                theta_step_size = np.radians(1)  # 转换成弧度
-                phi_step = 0
-                phi_step_size = np.radians(1)  # 转换成弧度
 
-                
-                # testing projection
-                print("Event number ", totalNumOfEvent)
+                # print("Event number ", totalNumOfEvent)
                 
                 mu_direction = [tree.trueDirX, tree.trueDirY, tree.trueDirZ]
                 mu_direction = mu_direction/np.linalg.norm(mu_direction)
                 muon_fit_start_position = np.array([tree.trueVtxX, tree.trueVtxY, tree.trueVtxZ])/100
                 
+                new_mu_direction = mu_direction
+                new_mu_positions = [muon_fit_start_position + (i * new_mu_direction * muon_step) for i in range(muon_prop_steps)]
+                new_mu_positions = [pos for pos in new_mu_positions if (pos[2] < 2.95)]
+                
+                #test_position = [muon_fit_start_position[0] + 0.12, muon_fit_start_position[1] + 0.12, muon_fit_start_position[2]]
+                test_position = [muon_fit_start_position[0], muon_fit_start_position[1], muon_fit_start_position[2]]
+
+                positionPass = True
+                if len(new_mu_positions) == 0:
+                    positionPass = False
+                    continue
+                
+                passPositions = ['center', 'll', 'tt', 'rl', 'bt','none']
+                passPosition = passPositions[5]
+                # WCSim LAPPD center is at (0,0,2.948)
+                
+                if passPosition == 'center':
+                    # select muon track that start at the center, end at the center              
+                    if test_position[0] <-0.5 or test_position[0] > 0.5:
+                        positionPass = False
+                    if test_position[1] <-0.5 or test_position[1] > 0.5:
+                        positionPass = False
+                    if new_mu_positions[-1][0] <-0.5 or new_mu_positions[-1][0] > 0.5:
+                        positionPass = False
+                    if new_mu_positions[-1][1] <-0.5 or new_mu_positions[-1][1] > 0.5:
+                        positionPass = False
+                elif passPosition == 'll':
+                    '''
+                    # select muon track that goes stright forward and pass on left side 
+                    if test_position[0] < -0.5 or test_position[0] > -0.2: # -0.5 < x < -0.2
+                        positionPass = False
+                    if test_position[1] < -0.2 or test_position[1] > 0.2: # -0.2 < y < 0.2
+                        positionPass = False
+                    if new_mu_positions[-1][0] < -0.5 or new_mu_positions[-1][0] > -0.2:
+                        positionPass = False
+                    if new_mu_positions[-1][1] < -0.2 or new_mu_positions[-1][1] > 0.2:
+                        positionPass = False
+                    '''
+                    if test_position[0] > -0.2 or test_position[0] < -0.7: # -0.5 < x < -0.2
+                        positionPass = False
+                    if test_position[1] < -0.3 or test_position[1] > 0.3: # -0.2 < y < 0.2
+                        positionPass = False
+                    if new_mu_positions[-1][0] > -0.2 or new_mu_positions[-1][0] < -0.7:
+                        positionPass = False
+                    if new_mu_positions[-1][1] < -0.3 or new_mu_positions[-1][1] > 0.3:
+                        positionPass = False
+                        
+                elif passPosition == 'tt':
+                    # select muon track that goes stright forward and pass on top side
+                    if test_position[0] < -0.3 or test_position[0] > 0.3:
+                        positionPass = False
+                    if test_position[1] < 0.2 or test_position[1] > 0.7:
+                        positionPass = False
+                    if new_mu_positions[-1][0] < -0.3 or new_mu_positions[-1][0] > 0.3:
+                        positionPass = False      
+                    if new_mu_positions[-1][1] < 0.2 or new_mu_positions[-1][1] > 0.7:
+                        positionPass = False       
+                elif passPosition == 'rl':
+                    # select muon track that starts from right and pass from left side
+                    if test_position[0] < 0.2 or test_position[0] > 0.7:
+                        positionPass = False
+                    if test_position[1] < -0.3 or test_position[1] > 0.3:
+                        positionPass = False
+                    if new_mu_positions[-1][0] < -0.7 or new_mu_positions[-1][0] > -0.2:
+                        positionPass = False
+                    if new_mu_positions[-1][1] < -0.3 or new_mu_positions[-1][1] > 0.3:
+                        positionPass = False
+                elif passPosition == 'bt':
+                    # select muon track that starts from bottom and pass from top side
+                    if test_position[0] < -0.3 or test_position[0] > 0.3:
+                        positionPass = False
+                    if test_position[1] < -0.7 or test_position[1] > -0.2:
+                        positionPass = False
+                    if new_mu_positions[-1][0] < -0.3 or new_mu_positions[-1][0] > 0.3:
+                        positionPass = False
+                    if new_mu_positions[-1][1] < 0.2 or new_mu_positions[-1][1] > 0.7:
+                        positionPass = False
+                elif passPosition == 'none':
+                    positionPass = True
+                
+                if not positionPass:
+                        continue
+                
+                #print("New event, pass the muon position cuts, event number", totalNumOfEvent)
+                print(totalNumOfEvent, passCutEventNum, test_position, mu_direction)
+                #print("The last muon position: ", new_mu_positions[-1])
+                
+                
+                
                 print("True Muon start at:")
                 print("Muon start position: ", muon_fit_start_position)
                 print("Muon direction: ", mu_direction)
+                
+                LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
+                mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True)
+
+                true_vertex_position = muon_fit_start_position
+                true_vertex_direction = mu_direction
+                
+                FinalOptimizationResult[totalNumOfEvent] = {
+                    "mu_optimization_chain": mu_optimization_chain,
+                    "true_vertex_position": true_vertex_position,
+                    "true_vertex_direction": true_vertex_direction,
+                    "PE_on_LAPPD0": len(LHitXs_fit)
+                }
+
+                opt.store_results_to_hdf5(save_result_Name, FinalOptimizationResult)
+                
                 
                 ##############################################
                 ######## To loop the likelihood, add different muon position and direction here, then make the mu positions
                 ##############################################
                 
-                TotalFitResult = []
-                min_waveform_diff = 1e10
-                bestResultWaveform = np.zeros((28, 2, 256))
-                bestFitHits = []
-                
-                TotalStepNum = (2*x_step+1)*(2*y_step+1)*(2*theta_step+1)*(2*phi_step+1)
-                loop_index = 0
-
-                SimPE = 0
-                
-                for x_offset in range(-x_step, x_step + 1):
-                    for y_offset in range(-y_step, y_step + 1):
-                        # 计算新的x, y坐标
-                        x_at_z = muon_fit_start_position[0] + x_offset * x_step_size
-                        y_at_z = muon_fit_start_position[1] + y_offset * y_step_size - 0.2255 # seems the center of LAPPD 0 in MC is not the actual LAPPD position
-                        z_at_z = muon_fit_start_position[2]
-                        new_start_position = [x_at_z, y_at_z, z_at_z]
-
-                        # 遍历theta和phi，调整Muon方向
-                        for theta_offset in range(-theta_step, theta_step + 1):
-                            for phi_offset in range(-phi_step, phi_step + 1):
-                                best_totalPE =0
-                                loop_index+=1
-                                print("Calculating step x: ", x_offset+x_step, " y: ", y_offset+y_step, ". Total steps: ", loop_index, "/", TotalStepNum)
-                                # 计算新的theta和phi
-                                theta = theta_offset * theta_step_size
-                                phi = phi_offset * phi_step_size
-                                
-                                # 旋转初始Muon方向
-                                new_mu_direction = proj.rotate_vector(mu_direction, theta, phi)
-                                new_mu_direction = new_mu_direction / np.linalg.norm(new_mu_direction)  # 归一化
-                                
-                                
-                                mu_positions = [new_start_position + (i * new_mu_direction * muon_step) for i in range(muon_prop_steps)]
-                                # select the muon step only if the xyz position is within the tank
-                                mu_positions = [pos for pos in mu_positions if (pos[2] < 3)]
-                                
-                                print("While Looping:")
-                                print("Muon steps: ", len(mu_positions))
-                                print("Muon start position: ", new_start_position)
-                                print("Muon direction: ", new_mu_direction)
-                                
-                                LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
-                                #print("object test",LAPPD_profile.absorption_wavelengths)
-                                
-                                print("testing muon optimization:")
-                                opt.MuonOptimization(LAPPD_profile, (new_start_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 3, 3, 0.05, 10)
-                            
-                                Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_grids)
-                                Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step, shiftTime = True)
-                                updated_hits_withPE = proj.update_lappd_hit_matrices(
-                                    results_with_time=Results_withMuTime,       
-                                    absorption_wavelengths = absorption_wavelengths,
-                                    absorption_coefficients = absorption_coefficients,
-                                    qe_2d=qe_2d,                               # QE 2D, normalized
-                                    gain_2d=gain_2d,                           # gain distribution 2D, normlized
-                                    QEvsWavelength_lambda=QEvsWavelength_lambda,    # QE vs wavelength, wavelength array
-                                    QEvsWavelength_QE=QEvsWavelength_QE,            # QE vs wavelength, QE array
-                                    bin_size=10,                                    # wavelength bin size
-                                    #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
-                                    CapillaryOpenRatio = 1                       # capillary open ratio of MCP
-                                )
-                                # data format: updated_hits_withPE = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
-                                #loop first index gives different y
-                                #loop second index gives different x
 
 
-                                    
-                                # use the updated_hits_withPE, and do poisson sampling based on the hit PE in each hit.
-                                # do this sampling 5 times, calculate the waveform and min_diff for each time
-                                # use the best min_diff to pick the best result, save the best waveform and best fit hits
-                                
-                                
-                                sampleTimes = 1
-                                    
-                                min_diff_best = float('inf')
-                                best_shiftDT = 0
-                                
-                                    
-                                for sample_i in range(sampleTimes):
-                                    
-                                    sampled_hits_withPE = proj.sample_updatedHits_PE_Poisson(updated_hits_withPE, Poisson = True)
-                                    #sampled_hits_withPE = updated_hits_withPE
-                                    LAPPD_Hit_2D_sampled, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1)
-
-                                    Sim_Waveforms_sampled = proj.generate_lappd_waveforms(LAPPD_Hit_2D_sampled, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
-                                    shiftDT_sampled, min_diff_sampled, waveform_diff_sampled, Sim_Waveform_shifted_sampled = proj.align_waveforms(Sim_Waveforms_sampled[0], Data_Waveform[0])
-                                    
-                                    print("sample time: ", sample_i, " Min diff: ", min_diff_sampled, " Total PE: ", totalPE)
-                                    
-                                    if(min_diff_sampled < min_diff_best):
-                                        min_diff_best = min_diff_sampled
-                                        bestResultWaveform = Sim_Waveform_shifted_sampled
-                                        #bestResultWaveform = Sim_Waveforms_sampled[0]
-                                        bestFitHits = sampled_hits_withPE
-                                        best_totalPE = totalPE
-                                        SimPE = totalPE
-                                        best_shiftDT = shiftDT_sampled
-
-                                print("Shifted DT: ", best_shiftDT, " Min diff: ", min_diff_best)
-                                print("Total PE: ", best_totalPE)
-                                '''
-                                Sim_Waveforms = proj.generate_lappd_waveforms(LAPPD_Hit_2D, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
-                                #Sim_Waveforms[LAPPD_id][0=dowm, 1=up][256]
-                                
-                                shiftDT, min_diff, waveform_diff, Sim_Waveform_shifted = proj.align_waveforms(Sim_Waveforms[0], Data_Waveform[0], SimRange=(0, 100), shiftRange=(100, 150))
-                                # Now the Sim_Waveform_shifted is aligned with the Data_Waveform  (not even chi^2 tho)
-                                print("Shifted DT: ", shiftDT, " Min diff: ", min_diff)
-                                
-                                if(min_diff < min_waveform_diff):
-                                    min_waveform_diff = min_diff
-                                    bestResultWaveform = Sim_Waveform_shifted
-                                    bestFitHits = updated_hits_withPE
-                                    SimPE = totalPE
-                                '''
-                                    
-                                
-                                TotalFitResult.append([new_start_position[0], new_start_position[1], new_start_position[2], new_mu_direction[0], new_mu_direction[1], new_mu_direction[2], min_diff_best, best_totalPE])
-                
-                #print("Best fit result: ", TotalFitResult)
-                output_txtfile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCoutput.txt'
-                with open(output_txtfile, 'w') as filetxt:
-                    json.dump(TotalFitResult, filetxt)
-                    
-                    
-                #print("Best fit hits: ", bestFitHits)
-                # bestFitHits_converted = [hits per particle step]
-                # for each hit:
-                # data format: updated_hits_withPE = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
-                bestFitHits_converted = [[(int(a), int(b), int(c), float(d), float(e), float(f)) for (a, b, c, d, e, f) in sublist] for sublist in bestFitHits]
-                output_peTXTFile = plot_save_path+'Event' + str(totalNumOfEvent) +'_MCPEInfo.txt'
-                with open(output_peTXTFile, 'w') as filetxt:
-                    json.dump(bestFitHits_converted, filetxt)
-
-                
+                '''
                 plotName = plot_save_path + 'Event' + str(totalNumOfEvent) + '_MCwaveform.png'
                 ed.plotWaveforms(plotName, Data_Waveform[0], bestResultWaveform, (0,256), SimPE= SimPE, DataPE = len(LHitXs_fit))
                 #ed.plotWaveforms(plotName, Data_Waveform[0], Sim_Waveforms[0], (0,256))
@@ -541,7 +540,7 @@ if __name__ == "__main__":
                 plotName2D = plot_save_path + 'Event' + str(totalNumOfEvent) + '_MC2D.png'
                 ed.DisplayHits(plotName2D, bestFitHits, LAPPD_grids)
                 
-                '''
+                
                 '''
                 
 
@@ -549,6 +548,8 @@ if __name__ == "__main__":
                 if(passCutEventNum > processEventNumber):
                     print("Process the maximum number of events, break")
                     break
+                
+
 
                 
 
@@ -560,9 +561,10 @@ if __name__ == "__main__":
         #file.cd()
         #tree.Write("", ROOT.TObject.kOverwrite)
         #file.Close()
-        print('Processing finished, close the file')
+        #print('Processing finished, close the file')
 
-
+    
+    
     print('Total number of events: ', totalNumOfEvent)
     print('Number of events pass the cuts: ', passCutEventNum)
 

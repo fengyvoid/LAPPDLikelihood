@@ -56,6 +56,7 @@ if __name__ == "__main__":
     beam_data_path = basePath + 'data/'
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
+    save_result_path = basePath + 'OptimizationResults/'
 
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
@@ -69,9 +70,9 @@ if __name__ == "__main__":
         
     root_file_pattern = beam_data_path + 'ANNIETree_MC_2_1.root'
     
-    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_37_16.root'
+    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_2_16.root'
     
-    SelectEntry = True
+    SelectEntry = False
     entry = 131
     entry_start = entry-5
     entry_end = entry+5
@@ -109,10 +110,10 @@ if __name__ == "__main__":
     # for MC root tree
     cut_LAPPDTubeID = True
     TargetTubeID = [1244]
-    cut_HitPENumber = False
-    HitPENumber = 20
-    cut_TotalLAPPDHitPE = False
-    TotalLAPPDHitPE = 200
+    cut_HitPENumber = True
+    HitPENumber = 10
+    cut_TotalLAPPDHitPE = True
+    TotalLAPPDHitPE = 100
 
 
     totalNumOfEvent = 0
@@ -176,6 +177,7 @@ if __name__ == "__main__":
 
     sPE_pulse_time, sPE_pulse = li.read_spe_pulse_from_root(LAPPD_profile_path + "singlePETemplate_LAPPD40.root", "pos10_1_1D", 7)
 
+    
 
     for fileName in file_list:
         print('Processing file: ', fileName)
@@ -200,6 +202,12 @@ if __name__ == "__main__":
         for i in tqdm(range(processStartEntry, tree.GetEntries())):
             tree.GetEntry(i)
             totalNumOfEvent += 1
+            ########
+            
+            FinalOptimizationResult = {}
+            save_result_Name = save_result_path + 'Result_Event_' + str(totalNumOfEvent) + '.h5'
+            
+            
             ########
 
             processThisEntry = True 
@@ -445,8 +453,30 @@ if __name__ == "__main__":
                                 #print("object test",LAPPD_profile.absorption_wavelengths)
                                 
                                 print("testing muon optimization:")
-                                opt.MuonOptimization(LAPPD_profile, (new_start_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 3, 3, 0.05, 10)
+                                #opt.MuonOptimization(LAPPD_profile, (new_start_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 3, 3, 0.05, 10)
+                                test_position = [new_start_position[0] + 0.12, new_start_position[1] + 0.12, new_start_position[2]]
+                                #mu_optimization_chain, best_hits, improved_global = opt.MuonOptimization(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10 )
                             
+                                mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 3, 3, maxIterStep_xyz = 50, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3)
+
+                                print("Optimization finished, printing results:")
+                                print("mu_optimization_chain = ", mu_optimization_chain)
+                                #print("best_hits = ", best_hits)
+                                
+                                #opt.store_results_to_hdf5(save_result_path, FinalOptimizationResult)
+
+                                
+                                true_vertex_position = new_start_position
+                                true_vertex_direction = new_mu_direction
+                                #FinalOptimizationResult.append([mu_optimization_chain, best_hits, true_vertex_position, true_vertex_direction, improved_global])
+                                
+                                FinalOptimizationResult[totalNumOfEvent] = {
+                                    "mu_optimization_chain": mu_optimization_chain,
+                                    "true_vertex_position": true_vertex_position,
+                                    "true_vertex_direction": true_vertex_direction,
+                                    "improved_global": improved_global
+                                }
+                                
                                 Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_grids)
                                 Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step, shiftTime = True)
                                 updated_hits_withPE = proj.update_lappd_hit_matrices(
@@ -549,6 +579,8 @@ if __name__ == "__main__":
                 if(passCutEventNum > processEventNumber):
                     print("Process the maximum number of events, break")
                     break
+                
+            opt.store_results_to_hdf5(save_result_Name, FinalOptimizationResult)
 
                 
 
@@ -562,7 +594,8 @@ if __name__ == "__main__":
         #file.Close()
         print('Processing finished, close the file')
 
-
+    
+    
     print('Total number of events: ', totalNumOfEvent)
     print('Number of events pass the cuts: ', passCutEventNum)
 
