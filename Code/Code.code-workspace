@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../MCDataView/BeamClusterAnalysisMC"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"ptc.C": "cpp",
+			"vector": "cpp",
+			"iosfwd": "cpp"
+		}
+	}
+}

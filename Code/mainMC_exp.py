@@ -57,7 +57,7 @@ if __name__ == "__main__":
     beam_data_path = basePath + 'data/'
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
-    save_result_path = basePath + 'OptimizationResults/2.FixDir/'
+    save_result_path = basePath + 'OptimizationResults/3.SamplingTest/'
 
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
@@ -71,13 +71,13 @@ if __name__ == "__main__":
         
     #root_file_pattern = beam_data_path + 'ANNIETree_MC_*.root'
     
-    MCrunNumber = 95
+    MCrunNumber = 0
     MCSubRunNumber = 0
     #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_{MCrunNumber}_{MCSubRunNumber}.root'
     
     #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/tree_95-99/mergedEventTree_95_0.root'
     root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_*.root'
-    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_ll_center_100.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_rl_center_100.root'
 
     #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_rl_center_100.root'
 
@@ -149,9 +149,12 @@ if __name__ == "__main__":
     passCutEventNum = 0
 
 
-    muon_step = 0.01 # in meter
-    muon_prop_steps = 500 # max number
+    muon_step = 0.01 # in meter # while less than 0.25 cm you need to change the 2000 steps limit in projection function to be higher
+    muon_prop_steps = 2000 # max number
     muon_start_Z = 1.2 # in meter
+    
+    phi_steps = 360 # how many rays on phi direction
+    SampleIntergerHitPE = True
 
     #########################################
     ######## start to process the event #####
@@ -194,6 +197,9 @@ if __name__ == "__main__":
 
     wavelength63 = qe_data_63['Wavelength (nm)'].values
     QE63 = qe_data_63['Average QE'].values
+    
+    #print("Using doubled QE!")
+    #print(QE25)
 
     # Create arrays for QE vs Wavelength for 3 LAPPDs
     QEvsWavelength_lambda = [wavelength25, wavelength63, wavelength63]
@@ -243,7 +249,7 @@ if __name__ == "__main__":
             
             
             FinalOptimizationResult = {}
-            save_result_Name = save_result_path + f'Result_{MCrunNumber}_{MCSubRunNumber}_Event_' + str(totalNumOfEvent) + '.h5'
+            save_result_Name = save_result_path + f'Result_{MCrunNumber}_{MCSubRunNumber}_Event' + str(totalNumOfEvent) + '_' + str(passCutEventNum) +'.h5'
             
             
             ########
@@ -420,6 +426,7 @@ if __name__ == "__main__":
                 new_mu_direction = mu_direction
                 new_mu_positions = [muon_fit_start_position + (i * new_mu_direction * muon_step) for i in range(muon_prop_steps)]
                 new_mu_positions = [pos for pos in new_mu_positions if (pos[2] < 2.95)]
+                # !new_mu_positions was only used for tracking muon direction, the actual muon step positions are generaget in the projection function from starting point and direction
                 
                 #test_position = [muon_fit_start_position[0] + 0.12, muon_fit_start_position[1] + 0.12, muon_fit_start_position[2]]
                 test_position = [muon_fit_start_position[0], muon_fit_start_position[1], muon_fit_start_position[2]]
@@ -511,7 +518,7 @@ if __name__ == "__main__":
                 print("Muon direction: ", mu_direction)
                 
                 LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
-                mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True)
+                mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = muon_step, phi_steps = phi_steps, sampling = SampleIntergerHitPE)
 
                 true_vertex_position = muon_fit_start_position
                 true_vertex_direction = mu_direction

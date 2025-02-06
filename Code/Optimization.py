@@ -649,14 +649,16 @@ def ConvertWaveform(Sim_Waveforms, Data_waveforms, pe_strip_samples):
     return Converted_Sim_Waveforms, Converted_Data_waveforms, Converted_stripPE
     
 
-def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 5, low_thres = -3):
+def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 5, low_thres = -3, saving = False, sampling = True):
         
     # using the input hits, do a first calculation for L and similarities
     pe_list = []
     probability_list = []
     hitNum_list = []
     #LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_exped(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = True)
-    LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perTimeSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = False)
+    #LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perStepSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
+    LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perTimeSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
+    
 
     print("L_exp, get assigned PE list: ", pe_list)
     print("Probability_list: ", probability_list)
@@ -669,10 +671,12 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
     Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_sampled, data_waveforms, pe_strip_samples)
     L_final, Similarities_final, shift_T_final = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
 
-    printTest = True
+    printTest = saving
     if(printTest):
-        save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/2.FixDir"
+        save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/3.SamplingTest"
         base_filename  = "WithSampling_"
+        if not sampling:
+            base_filename  = "NoSampling_"
         extension      = ".txt"
 
         file_index = 0
@@ -681,7 +685,7 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
             file_index += 1
             save_path = os.path.join(save_directory, f"{base_filename}{file_index}{extension}")
             
-        if file_index > 2000:
+        if file_index > 5000:
             return L_final, Similarities_final, shift_T_final, pe_list, LAPPD_Hit_2D_exp, Info
         with open(save_path, 'w') as f:
             for i in range(28):  
@@ -693,7 +697,7 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
                 c2_str = ", ".join(f"{x:.2f}" for x in c2)
                 f.write(c1_str + "\n")
                 f.write(c2_str + "\n")
-
+        print("Saved to ", save_path)   
         
     return L_final, Similarities_final, shift_T_final, pe_list, LAPPD_Hit_2D_exp, Info
 
@@ -894,14 +898,15 @@ def OptimizeLInThisStep(sampled_hits_withPE, L_0, Similarities_0, re_LAPPD_index
         
     return resampled_hits_withPE_final, L_final, Similarities_final, shift_T_final, totalResampleTime
         
-def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dtheta, dphi, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = False):
+def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dtheta, dphi, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = False, mu_step = 0.01, phi_steps = 360, sampling = True):
     mu_optimization_chain = []
     Final_hits = []
     
+
     print("Start Optimization")
     mu_position, mu_direction = mu_input
-    sampled_hits_withPE = DoProjection(LAPPD_profile, mu_position, mu_direction)
-    L_0, Similarities_0, shift_T_0, pe_list_0, LAPPD_Hit_2D_exp_0, Info =  L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile)
+    sampled_hits_withPE = DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = mu_step, phi_steps=phi_steps)
+    L_0, Similarities_0, shift_T_0, pe_list_0, LAPPD_Hit_2D_exp_0, Info =  L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, saving = False, sampling = sampling)
     mu_optimization_chain.append([mu_position, mu_direction, L_0, Similarities_0, shift_T_0, [dx, dy, dz,0,0], Info, LAPPD_Hit_2D_exp_0])
     
     best_L = L_0
@@ -998,7 +1003,7 @@ def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, d
     else:
         # make a grid of likelihood
         gridStep = 0.03
-        stepNumber = 5
+        stepNumber = 0.5
         
         offset = 0
         
@@ -1007,15 +1012,15 @@ def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, d
         
         print("Start generating grid with center at ", mu_position)
         
-        for xStep in range(0,stepNumber*2):
-            print("xStep: ", xStep)
-            for yStep in range(0, stepNumber*2):
+        for xStep in range(0,int(stepNumber*2)):
+            for yStep in range(0, int(stepNumber*2)):
+                print("xStep: ", xStep, "yStep: ", yStep)
                 shiftedPosition = [mu_position[0] + offset + (xStep - stepNumber) * gridStep, mu_position[1] + offset + (yStep - stepNumber) * gridStep, mu_position[2]]
-                sampled_hits_withPE = DoProjection(LAPPD_profile, shiftedPosition, mu_direction)
-                L_xy, Similarities_0, shift_T_0, pe_list_0, LAPPD_Hit_2D_exp_0, Info =  L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile)
+                sampled_hits_withPE = DoProjection(LAPPD_profile, shiftedPosition, mu_direction, phi_steps=phi_steps)
+                L_xy, Similarities_0, shift_T_0, pe_list_0, LAPPD_Hit_2D_exp_0, Info =  L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, saving = True, sampling = sampling)
                 mu_optimization_chain.append([mu_position, mu_direction, L_xy, Similarities_0, shift_T_0, [dx, dy, dz,0,0], Info, LAPPD_Hit_2D_exp_0])
                 
-            print("this x finished, L in last step: ", L_xy)
+            #print("this x finished, L in last step: ", L_xy)
             
         improved_global = True
 
@@ -1454,11 +1459,11 @@ def MuonOptimization_old(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dt
     return mu_optimization_chain, Final_hits
 
 
-def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 500):
+def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360):
     
     mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
-    mu_positions = [pos for pos in mu_positions if (pos[2] < 3)]
-    Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid)
+    mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
+    Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid, phi_steps = phi_steps)
     Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step)
     updated_hits_withPE = proj.update_lappd_hit_matrices(
         results_with_time=Results_withMuTime,       
@@ -1470,7 +1475,9 @@ def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muo
         QEvsWavelength_QE=LAPPD_profile.QEvsWavelength_QE,            # QE vs wavelength, QE array
         bin_size=LAPPD_profile.bin_size,                                    # wavelength bin size
         #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
-        CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio                 # capillary open ratio of MCP
+        CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio,                 # capillary open ratio of MCP
+        phi_steps = phi_steps,
+        muon_step = muon_step
     )
     sampled_hits_withPE = sample_updatedHits_PE_Poisson(updated_hits_withPE)
     

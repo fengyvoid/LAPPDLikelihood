@@ -10,14 +10,14 @@ import math
 def process_photon_hits(particle_position, particle_direction, LAPPD_grids, 
                         tolerance=0.007, PMTPosition=[(0.26489847,0.01038878,2.72413225, 0.254/2), (-0.2666204,0.00990167,2.72809739, 0.254/2), 
                                                       (0.27324662,-0.3994107,2.79745653, 0.2032/2), (-0.2689693,-0.4085338,2.79763283, 0.2032/2)], 
-                        speed_of_light=2.98e8):
+                        speed_of_light=2.98e8, phi_steps = 360):
     
     KDTree_list = [KDTree(LAPPD_grid.reshape(-1, 3)) for LAPPD_grid in LAPPD_grids]
     
     min_tStep = (tolerance / 1.5) / speed_of_light
 
     theta = np.deg2rad(42)
-    phi_angles = np.linspace(0, 2*np.pi, 360, endpoint=False)
+    phi_angles = np.linspace(0, 2*np.pi, phi_steps, endpoint=False)
     
     particle_direction = np.array(particle_direction)
     particle_direction /= np.linalg.norm(particle_direction)
@@ -93,17 +93,17 @@ def process_photon_hits(particle_position, particle_direction, LAPPD_grids,
 
 # processing multiple particle position
 def process_particle_position(args):
-    particle_position, particle_direction, LAPPD_grids = args
+    particle_position, particle_direction, LAPPD_grids, phi_steps_in = args
 
-    return process_photon_hits(particle_position, particle_direction, LAPPD_grids)
+    return process_photon_hits(particle_position, particle_direction, LAPPD_grids, phi_steps=phi_steps_in)
 
-def parallel_process_positions(particle_positions, particle_direction, LAPPD_grids):
+def parallel_process_positions(particle_positions, particle_direction, LAPPD_grids, phi_steps = 360):
     with Pool(8) as pool:  # use 8 "cores", multiple threads in one core may not be better because of the 
         #results = list(tqdm(pool.imap_unordered(
         #    process_particle_position, [(pos, particle_direction, LAPPD_grids) for pos in particle_positions]
         #), total=len(particle_positions), desc="Processing particles", miniters=1))
         results = list(pool.imap_unordered(
-            process_particle_position, [(pos, particle_direction, LAPPD_grids) for pos in particle_positions]
+            process_particle_position, [(pos, particle_direction, LAPPD_grids, phi_steps) for pos in particle_positions]
         ))
              
     return results
@@ -146,7 +146,7 @@ def process_results_with_mu_time(results, step_size, speed_of_light = 2.998e8, s
 
 
 # calculate the PE number of each hit
-def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorption_coefficients , qe_2d, gain_2d, QEvsWavelength_lambda, QEvsWavelength_QE, bin_size=10, CapillaryOpenRatio = 0.6):
+def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorption_coefficients , qe_2d, gain_2d, QEvsWavelength_lambda, QEvsWavelength_QE, bin_size=10, CapillaryOpenRatio = 0.6, phi_steps = 360, muon_step = 0.01):
     # Define wavelength bins and constants
     wavelengths = np.arange(200 + bin_size / 2, 601 + bin_size / 2, bin_size)
     
@@ -162,7 +162,7 @@ def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorpt
             absorption_at_distance = absorption_function(wavelengths)
             
             # Calculate after-absorption photon count
-            initial_photons = 0.4513 * 370 / 360 #sin theta_C ^2 * 370 constant / 360 degree
+            initial_photons = 0.4513 * 370 * (muon_step/0.01) / phi_steps #sin theta_C ^2 * 370 pe per cm / 360 per degree (or phi step number)
             after_absorption_photons = initial_photons * np.exp(-absorption_at_distance * photon_distance)
 
             # Sum of photoelectrons (PE) for the current hit across wavelength bins
