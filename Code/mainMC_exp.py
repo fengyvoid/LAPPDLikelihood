@@ -20,6 +20,7 @@ import json
 import os
 import sys
 
+
 # import other functions
 import EventDisplay as ed
 import Projection as proj
@@ -57,7 +58,8 @@ if __name__ == "__main__":
     beam_data_path = basePath + 'data/'
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
-    save_result_path = basePath + 'OptimizationResults/3.SamplingTest/'
+    save_result_path = basePath + 'OptimizationResults/4.NoInnerStructure/MakeWaveforms/'
+    h5filePath = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/4.NoInnerStructure/MakeWaveforms/Waveforms'
 
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
@@ -67,6 +69,7 @@ if __name__ == "__main__":
         if not os.path.exists(path):
             os.makedirs(path)
             print(f"Create directory: {path}")
+            
 
         
     #root_file_pattern = beam_data_path + 'ANNIETree_MC_*.root'
@@ -77,10 +80,14 @@ if __name__ == "__main__":
     
     #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/tree_95-99/mergedEventTree_95_0.root'
     root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_*.root'
-    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_rl_center_100.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_lr_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_y0.03_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_xDir-0.45_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_downUp.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_y+0.04_500.root'
 
-    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_rl_center_100.root'
-
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/innerStructure/ANNIETree_MC_noInnerStructure.root'
+    
     SelectEntry = False
     entry = 131
     entry_start = entry-5
@@ -148,13 +155,16 @@ if __name__ == "__main__":
     totalNumOfEvent = 0
     passCutEventNum = 0
 
-
-    muon_step = 0.01 # in meter # while less than 0.25 cm you need to change the 2000 steps limit in projection function to be higher
-    muon_prop_steps = 2000 # max number
-    muon_start_Z = 1.2 # in meter
+    #########################################
+    ######## setting for projection     #####
+    #########################################
     
+    muon_step = 0.01 # in meter # while less than 0.25 cm you need to change the 2000 steps limit in projection function to be higher
+    muon_prop_steps = 500 # max number
+    muon_start_Z = 1.2 # in meter
     phi_steps = 360 # how many rays on phi direction
-    SampleIntergerHitPE = True
+    SampleIntergerHitPE = False
+    
 
     #########################################
     ######## start to process the event #####
@@ -167,10 +177,11 @@ if __name__ == "__main__":
     PMT_chanKey_2023_multi = [[462,428,406,412], [374,377,407,445], [463,411,400,404]]
     ######
 
+    DetectorCenter = [0*100, -0.144649*100, 1.681*100]
     # make some LAPPD grids
     #LAPPD_Centers = [[0,-0.2255,2.951], [-0.898, -0.2255 + 0.5, 2.579], [0.898, -0.2255 - 0.5 , 2.579]]
     #LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
-    LAPPD_Centers = [[0, 0, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
+    LAPPD_Centers = [[0, -0.144 , 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
 
     LAPPD_Directions = [[0,0,-1], [1,0,-1], [-1,0,-1]]
     LAPPD_stripWidth = 0.462
@@ -194,6 +205,9 @@ if __name__ == "__main__":
 
     wavelength25 = qe_data_25['Wavelength (nm)'].values
     QE25 = qe_data_25['Average QE'].values
+    
+    #print("wavelength25",wavelength25)
+    #print("QE25 is ",QE25)
 
     wavelength63 = qe_data_63['Wavelength (nm)'].values
     QE63 = qe_data_63['Average QE'].values
@@ -216,8 +230,6 @@ if __name__ == "__main__":
 
     for fileName in file_list:
         #print('Processing file: ', fileName)
-        if fileName == '/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_17_15.root':
-            continue
 
         file = ROOT.TFile(fileName, "READ")
         tree = file.Get("Event")
@@ -399,15 +411,15 @@ if __name__ == "__main__":
                 #print("LHitXs_fit:", LHitXs_fit)
 
                 for index, x in enumerate(LHitXs_fit):
-                    step = int((x - XStart) // LAPPD_gridSize)
+                    step = int((x - XStart) / LAPPD_gridSize)
                     if 0 <= step < 28:
                         YPos = LHitYs_fit[index]
-                        YStep = int((YPos - YStart) // LAPPD_gridSize)
+                        YStep = int((YPos - YStart) / LAPPD_gridSize)
                         if 0 <= YStep < 28:
                             hit = (YStep, (LHitTimes_fit[index] % 25.0 + 5)*1e-9, 1)
                             LAPPD_MCHit_2D[0][step].append(hit)
             
-
+                MCHitNum = len(LHitXs_fit)
                 Data_Waveform = proj.generate_lappd_waveforms(LAPPD_MCHit_2D, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
                 #Data_Waveform[LAPPD_id][strip number][0=dowm, 1=up][256]
                 #print("Data_Waveform:", len(Data_Waveform), len(Data_Waveform[0]), len(Data_Waveform[0][0]), len(Data_Waveform[0][0][0]))
@@ -420,8 +432,10 @@ if __name__ == "__main__":
                 # print("Event number ", totalNumOfEvent)
                 
                 mu_direction = [tree.trueDirX, tree.trueDirY, tree.trueDirZ]
+                #mu_direction = [-0.4, 0, 0.6]
+                
                 mu_direction = mu_direction/np.linalg.norm(mu_direction)
-                muon_fit_start_position = np.array([tree.trueVtxX, tree.trueVtxY, tree.trueVtxZ])/100
+                muon_fit_start_position = np.array([tree.trueVtxX+DetectorCenter[0], tree.trueVtxY+DetectorCenter[1], tree.trueVtxZ+ DetectorCenter[2]])/100
                 
                 new_mu_direction = mu_direction
                 new_mu_positions = [muon_fit_start_position + (i * new_mu_direction * muon_step) for i in range(muon_prop_steps)]
@@ -430,7 +444,10 @@ if __name__ == "__main__":
                 
                 #test_position = [muon_fit_start_position[0] + 0.12, muon_fit_start_position[1] + 0.12, muon_fit_start_position[2]]
                 test_position = [muon_fit_start_position[0], muon_fit_start_position[1], muon_fit_start_position[2]]
-
+                
+                # print("muon_fit_start_position:", muon_fit_start_position)
+                # print("test_position input:", test_position)
+                
                 positionPass = True
                 if len(new_mu_positions) == 0:
                     positionPass = False
@@ -469,8 +486,7 @@ if __name__ == "__main__":
                     if new_mu_positions[-1][0] > -0.2 or new_mu_positions[-1][0] < -0.7:
                         positionPass = False
                     if new_mu_positions[-1][1] < -0.3 or new_mu_positions[-1][1] > 0.3:
-                        positionPass = False
-                        
+                        positionPass = False       
                 elif passPosition == 'tt':
                     # select muon track that goes stright forward and pass on top side
                     if test_position[0] < -0.3 or test_position[0] > 0.3:
@@ -514,12 +530,13 @@ if __name__ == "__main__":
                 
                 
                 print("True Muon start at:")
-                print("Muon start position: ", muon_fit_start_position)
-                print("Muon direction: ", mu_direction)
+                print("Muon start position: ", test_position)
+                print("Muon direction: ", new_mu_direction)
                 
                 LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
-                mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = muon_step, phi_steps = phi_steps, sampling = SampleIntergerHitPE)
-
+                #mu_optimization_chain, improved_global =  opt.MuonOptimization_expected(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = muon_step, phi_steps = phi_steps, sampling = SampleIntergerHitPE)
+                #mu_optimization_chain, improved_global = opt.MuonOptimization_weightingManyTimes(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = muon_step, phi_steps = phi_steps, sampling = SampleIntergerHitPE)
+                mu_optimization_chain, improved_global = opt.MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, (test_position, new_mu_direction), Data_Waveform, 0.05, 0.05, 0.05, 2, 2, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = muon_step, phi_steps = phi_steps, sampling = SampleIntergerHitPE, savePath = h5filePath+"Event"+str(passCutEventNum)+'_', MCHitNumber = MCHitNum)
                 true_vertex_position = muon_fit_start_position
                 true_vertex_direction = mu_direction
                 

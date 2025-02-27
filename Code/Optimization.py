@@ -353,7 +353,7 @@ def HaveHits(sampled_hits_withPE, target_LAPPD_index):
     return False
 
 
-def sample_updatedHits_PE_Poisson(hits_withPE):
+def sample_updatedHits_PE_Round(hits_withPE):
     sampled_hits_withPE = []
     for step in range(len(hits_withPE)):
         sampled_hits_withPE.append([])
@@ -364,12 +364,32 @@ def sample_updatedHits_PE_Poisson(hits_withPE):
             new_hit = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe, sampled_pe)
             ####
             sampled_hits_withPE[step].append(new_hit)
-            
-            
-            
-            
-            
     return sampled_hits_withPE
+
+def sample_updatedHits_PE_Poisson(hits_withPE):
+    sampled_hits_withPE = []
+    logP_total = 0.0
+    for step in range(len(hits_withPE)):
+        sampled_hits_withPE.append([])
+        for hit in hits_withPE[step]:
+            LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe = hit
+            sampled_pe = np.random.poisson(weighted_pe)
+            if weighted_pe > 0:
+                logP_hit = sampled_pe * math.log(weighted_pe) - weighted_pe - math.lgamma(sampled_pe + 1)
+            elif sampled_pe == 0:
+                logP_hit = 0.0
+            logP_total += logP_hit
+            #sampled_pe = round(weighted_pe)
+            if(sampled_pe > 0):
+                new_hit = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe, sampled_pe)
+            ####
+                sampled_hits_withPE[step].append(new_hit)
+    
+    #print("logP_total: ", logP_total)
+    return sampled_hits_withPE, logP_total
+
+
+
 
 # how to do the resample?
 # need more/less hits on top/bottom side
@@ -647,7 +667,60 @@ def ConvertWaveform(Sim_Waveforms, Data_waveforms, pe_strip_samples):
     #print("ConvertWaveform: ",Converted_stripPE)
             
     return Converted_Sim_Waveforms, Converted_Data_waveforms, Converted_stripPE
+
+
+# convert:
+    # From:
+    # Simulated waveform [LAPPD id][strip number][side][256] 
+    # Data waveform [LAPPD id][strip number][side][256]
+    # To:
+    # waveform [LAPPD id * 28 + strip number][side][256]
+def ConvertWaveformSimOnly(Sim_Waveforms):
+    # First, check each LAPPD id, if the strip number is not 28, return error.
+    Converted_Sim_Waveforms = []
+    for i in range(len(Sim_Waveforms)):
+        if len(Sim_Waveforms[i]) != 28:
+            print("ConvertWaveform Error: In Simulated waveform, LAPPD id {} has {} strips".format(i, len(Sim_Waveforms[i])))
+            return Converted_Sim_Waveforms
+
+    for i in range(len(Sim_Waveforms)):
+        for j in range(28):
+            Converted_Sim_Waveforms.append([Sim_Waveforms[i][j][0], Sim_Waveforms[i][j][1]])
+
+            
+    return Converted_Sim_Waveforms
     
+def printWaveform(Sim_Waveforms_sampled_converted, Data_waveforms_converted, shift_t, sampling = True):
+
+    save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/4.NoInnerStructure/FirstTest_withHolder"
+    base_filename  = "WithSampling_"
+    if not sampling:
+        base_filename  = "NoSampling_"
+    extension      = ".txt"
+
+    file_index = 0
+    save_path = os.path.join(save_directory, f"{base_filename}{file_index}{extension}")
+    while os.path.exists(save_path):
+        file_index += 1
+        save_path = os.path.join(save_directory, f"{base_filename}{file_index}{extension}")
+        
+    if file_index > 10000:
+        return 
+    with open(save_path, 'w') as f:
+        for i in range(28):  
+            w1_bottom, w1_top = Sim_Waveforms_sampled_converted[i]
+            w2_bottom, w2_top = Data_waveforms_converted[i]
+            c1 = np.array(combineWaveform(w1_bottom, w1_top, shift_t))
+            c2 = np.array(combineWaveform(w2_bottom, w2_top, 0))
+            c1_str = ", ".join(f"{x:.2f}" for x in c1)
+            c2_str = ", ".join(f"{x:.2f}" for x in c2)
+            f.write(c1_str + "\n")
+            f.write(c2_str + "\n")
+    print("Saved to ", save_path)   
+    
+        
+    
+
 
 def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 5, low_thres = -3, saving = False, sampling = True):
         
@@ -656,8 +729,8 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
     probability_list = []
     hitNum_list = []
     #LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_exped(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = True)
-    #LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perStepSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
-    LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perTimeSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
+    LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perStepSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
+    #LAPPD_Hit_2D_exp, pe_list, probability_list, hitNum_list = proj.convertToHit_2D_perTimeSlice_exp(sampled_hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = not sampling)
     
 
     print("L_exp, get assigned PE list: ", pe_list)
@@ -673,7 +746,7 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
 
     printTest = saving
     if(printTest):
-        save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/3.SamplingTest"
+        save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/3.SamplingTest/SimilarityCheck/output"
         base_filename  = "WithSampling_"
         if not sampling:
             base_filename  = "NoSampling_"
@@ -685,7 +758,7 @@ def L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, high_thres = 
             file_index += 1
             save_path = os.path.join(save_directory, f"{base_filename}{file_index}{extension}")
             
-        if file_index > 5000:
+        if file_index > 10000:
             return L_final, Similarities_final, shift_T_final, pe_list, LAPPD_Hit_2D_exp, Info
         with open(save_path, 'w') as f:
             for i in range(28):  
@@ -897,6 +970,102 @@ def OptimizeLInThisStep(sampled_hits_withPE, L_0, Similarities_0, re_LAPPD_index
             
         
     return resampled_hits_withPE_final, L_final, Similarities_final, shift_T_final, totalResampleTime
+
+def MuonOptimization_weightingManyTimes(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dtheta, dphi, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = False, mu_step = 0.01, phi_steps = 360, sampling = True, sampleTimes = 50):
+    mu_optimization_chain = []
+    Final_hits = []
+    
+    print("Start Optimization")
+    mu_position, mu_direction = mu_input
+    '''
+    Sim_Waveforms_Sumed, pe_strip_samples, hit_2D = DoProjectionForWaveform(LAPPD_profile, mu_position, mu_direction, muon_step = mu_step, phi_steps=phi_steps, sampleTimes = sampleTimes)
+    Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
+    L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
+    printWaveform(Sim_Waveforms_sampled_converted, Data_waveforms_converted, shift_T_0, sampling = True)
+    mu_optimization_chain.append([mu_position, mu_direction, L_xy, Similarities_0, shift_T_0, [0, 0, 0,0,0], [], hit_2D])
+    '''
+    
+    if (not makeGridL):
+        print("not making grid")
+    else:
+        XStepSize = 0.1
+        YStepSize = 0.1
+        XStepNumber = 5
+        YStepNumber = 5
+        
+        offset = 0
+        mu_position, mu_direction = mu_input
+        print("Start generating grid with center at ", mu_position)
+        
+        for xStep in range(1,int(XStepNumber*2)):
+            for yStep in range(1, int(YStepNumber*2)):
+                print("xStep: ", xStep, "yStep: ", yStep)
+                shiftedPosition = [mu_position[0] + offset + (xStep - XStepNumber) * XStepSize, mu_position[1] + offset + (yStep - YStepNumber) * YStepSize, mu_position[2]]
+                Sim_Waveforms_Sumed, pe_strip_samples, hit_2D = DoProjectionForWaveform(LAPPD_profile, shiftedPosition, mu_direction, muon_step = mu_step, phi_steps=phi_steps, sampleTimes = sampleTimes)
+                Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
+                L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
+                printWaveform(Sim_Waveforms_sampled_converted, Data_waveforms_converted, shift_T_0, sampling = True)
+                mu_optimization_chain.append([mu_position, mu_direction, L_xy, Similarities_0, shift_T_0, [xStep, yStep, 0,0,0], [], hit_2D])
+                
+            #print("this x finished, L in last step: ", L_xy)
+            
+        improved_global = True
+
+    return mu_optimization_chain, improved_global
+    
+    
+def MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dtheta, dphi, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = True, mu_step = 0.01, phi_steps = 360, sampling = True, sampleTimes = 1000, savePath = 'waveforms', MCHitNumber = 0):
+    mu_optimization_chain = []
+    Final_hits = []
+    
+    print("Start Optimization")
+    mu_position, mu_direction = mu_input
+    
+    
+    if (not makeGridL):
+        print("not making grid")
+    else:
+        XStepSize = 0.1
+        YStepSize = 0.1
+        XStepNumber = 1
+        YStepNumber = 1
+        
+        offset = 0
+        mu_position, mu_direction = mu_input
+        print("Start generating grid with center at ", mu_position)
+        
+        for xStep in range(1,int(XStepNumber*2)):
+            for yStep in range(1, int(YStepNumber*2)):
+                print("xStep: ", xStep, "yStep: ", yStep)
+                SaveFile = savePath + f"X{xStep}Y{yStep}" 
+                shiftedPosition = [mu_position[0] + offset + (xStep - XStepNumber) * XStepSize, mu_position[1] + offset + (yStep - YStepNumber) * YStepSize, mu_position[2]]
+                Sim_Waveforms_Sumed, pe_strip_samples, hit_2D, PE_averaged = DoProjectionForWaveformAndSave(LAPPD_profile, shiftedPosition, mu_direction, muon_step = mu_step, phi_steps=phi_steps, sampleTimes = sampleTimes, savePath = SaveFile +'.hdf5')
+                Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
+                L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
+                WCSimFile = SaveFile + 'WCSim_WithSimShift' + str(shift_T_0) + '.hdf5'
+                
+                with h5py.File(WCSimFile, 'w') as Wf:
+                    max_shape = (None,)
+                    dset_p = Wf.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
+                    dset_num = Wf.create_dataset("num", shape=(0,), maxshape=max_shape, dtype="f4")
+                    dset_wave = Wf.create_dataset("wave", shape=(0, 28, 2, 256), maxshape=(None, 28, 2, 256), dtype="f4")
+                    dset_p.resize((2,))
+                    dset_num.resize((2,))
+                    dset_wave.resize((2, 28, 2, 256))
+                    
+                    dset_p[0] = shift_T_0
+                    dset_wave[0] = Data_waveforms_converted
+                    dset_num[0] = PE_averaged
+                    dset_p[1] = MCHitNumber
+                    dset_wave[1] = Sim_Waveforms_sampled_converted
+                    dset_num[1] = PE_averaged
+                    break
+
+                printWaveform(Sim_Waveforms_sampled_converted, Data_waveforms_converted, shift_T_0, sampling = True)
+                
+        improved_global = True
+
+    return mu_optimization_chain, improved_global  
         
 def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dtheta, dphi, maxIterStep_xyz = 10, shrinkStepThreshold = 0.005, shrinkStepRatio = 0.8, high_thres = 5, low_thres = -3, makeGridL = False, mu_step = 0.01, phi_steps = 360, sampling = True):
     mu_optimization_chain = []
@@ -1003,8 +1172,13 @@ def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, d
     else:
         # make a grid of likelihood
         gridStep = 0.03
-        stepNumber = 0.5
+        stepNumber = 5
         
+        XStepSize = 0.03
+        YStepSize = 0.03
+        XStepNumber = 1
+        YStepNumber = 1
+         
         offset = 0
         
         mu_position, mu_direction = mu_input
@@ -1012,10 +1186,10 @@ def MuonOptimization_expected(LAPPD_profile, mu_input, data_waveforms, dx, dy, d
         
         print("Start generating grid with center at ", mu_position)
         
-        for xStep in range(0,int(stepNumber*2)):
-            for yStep in range(0, int(stepNumber*2)):
+        for xStep in range(1,int(XStepNumber*2)):
+            for yStep in range(1, int(YStepNumber*2)):
                 print("xStep: ", xStep, "yStep: ", yStep)
-                shiftedPosition = [mu_position[0] + offset + (xStep - stepNumber) * gridStep, mu_position[1] + offset + (yStep - stepNumber) * gridStep, mu_position[2]]
+                shiftedPosition = [mu_position[0] + offset + (xStep - XStepNumber) * XStepSize, mu_position[1] + offset + (yStep - YStepNumber) * YStepSize, mu_position[2]]
                 sampled_hits_withPE = DoProjection(LAPPD_profile, shiftedPosition, mu_direction, phi_steps=phi_steps)
                 L_xy, Similarities_0, shift_T_0, pe_list_0, LAPPD_Hit_2D_exp_0, Info =  L_expected(sampled_hits_withPE, data_waveforms, LAPPD_profile, saving = True, sampling = sampling)
                 mu_optimization_chain.append([mu_position, mu_direction, L_xy, Similarities_0, shift_T_0, [dx, dy, dz,0,0], Info, LAPPD_Hit_2D_exp_0])
@@ -1459,10 +1633,12 @@ def MuonOptimization_old(LAPPD_profile, mu_input, data_waveforms, dx, dy, dz, dt
     return mu_optimization_chain, Final_hits
 
 
-def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360):
+def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False):
     
     mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
     mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
+    print("mu_positions:", mu_position, mu_direction)
+    
     Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid, phi_steps = phi_steps)
     Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step)
     updated_hits_withPE = proj.update_lappd_hit_matrices(
@@ -1477,12 +1653,200 @@ def DoProjection(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muo
         #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
         CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio,                 # capillary open ratio of MCP
         phi_steps = phi_steps,
-        muon_step = muon_step
+        muon_step = muon_step,
+        weightingBy2D = weightingBy2D
     )
-    sampled_hits_withPE = sample_updatedHits_PE_Poisson(updated_hits_withPE)
+    sampled_hits_withPE = sample_updatedHits_PE_Round(updated_hits_withPE)
     
     return sampled_hits_withPE
 
+def DoProjectionForWaveform(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False, sampleTimes = 20, saving = False):
+    mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
+    mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
+    print("mu_positions:", mu_position, mu_direction)
+    
+    Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid, phi_steps = phi_steps)
+    Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step)
+    updated_hits_withPE = proj.update_lappd_hit_matrices(
+        results_with_time=Results_withMuTime,       
+        absorption_wavelengths = LAPPD_profile.absorption_wavelengths,
+        absorption_coefficients = LAPPD_profile.absorption_coefficients,
+        qe_2d=LAPPD_profile.qe_2d,                               # QE 2D, normalized
+        gain_2d=LAPPD_profile.gain_2d,                           # gain distribution 2D, normlized
+        QEvsWavelength_lambda=LAPPD_profile.QEvsWavelength_lambda,    # QE vs wavelength, wavelength array
+        QEvsWavelength_QE=LAPPD_profile.QEvsWavelength_QE,            # QE vs wavelength, QE array
+        bin_size=LAPPD_profile.bin_size,                                    # wavelength bin size
+        #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
+        CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio,                 # capillary open ratio of MCP
+        phi_steps = phi_steps,
+        muon_step = muon_step,
+        weightingBy2D = weightingBy2D
+    )
+    
+    AllWaveforms = []
+    logP_list = []
+    pe_strip_samples = []
+    AllHit2Ds = []
+    for i in range(sampleTimes):
+        sampled_hits_withPE, logP = sample_updatedHits_PE_Poisson(updated_hits_withPE)
+        #print("sampled_hits_withPE:", sampled_hits_withPE)
+        #sampled_hits_withPE[step][i] = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe, sampled_pe)
+        
+        LAPPD_Hit_2D, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1, reSampled = True)
+        #print("LAPPD_Hit_2D:", LAPPD_Hit_2D)
+        # [id][[] for __ in range(28)] (y_idx, hit_time, expectedPE)
+        Sim_Waveforms_sampled, pe_strip_samples = proj.generate_lappd_waveforms(LAPPD_Hit_2D, LAPPD_profile.sPE_pulse_time, LAPPD_profile.sPE_pulse, LAPPD_profile.LAPPD_stripWidth, LAPPD_profile.LAPPD_stripSpace,  generatePE = True)
+        AllHit2Ds.append(LAPPD_Hit_2D)
+        AllWaveforms.append(Sim_Waveforms_sampled)
+        logP_list.append(logP)
+        print(i, ", logP:", logP)
+        
+    logP_max = max(logP_list)
+    print("Find the maxP = ", logP_max, " prob = ", math.exp(logP_max))
+    # 2) 计算未归一化的概率 e^(logP - logP_max)，并累加
+    unnormalized_probs = []
+    for lp in logP_list:
+        # 做平移，防止 e^(非常大的负数) 直接下溢为 0
+        unnormalized_probs.append(math.exp(lp - logP_max))
+    sum_probs = sum(unnormalized_probs)
+    weights = [p / sum_probs for p in unnormalized_probs]
+    print("shifted unnormed probs:", unnormalized_probs)
+    print("sum_probs:", sum_probs)
+    
+    
+    print("normalized weights:", weights)
+    save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/4.NoInnerStructure/FirstTest_withHolder"
+
+    with open(save_directory+'/prob_data.txt', 'w') as f:
+        for up, w in zip(unnormalized_probs, weights):
+            f.write(f"{up}\t{w}\n")
+        
+    
+    # sum AllWaveforms with weights
+    Sim_Waveforms_Sumed = []
+    for j in range(len(Sim_Waveforms_sampled)):
+        W = np.zeros((28, 2, 256))
+        for samp in range(sampleTimes):
+            W += np.array(AllWaveforms[samp][j])/sampleTimes #* weights[samp]
+        Sim_Waveforms_Sumed.append(W)
+        
+    # find the index of largest weight, save that AllHit2Ds to LAPPD_Hits_2D_Sumed
+    max_index = weights.index(max(weights))
+    LAPPD_Hits_2D_Sumed = AllHit2Ds[max_index]
+    
+    '''
+    # sum AllHit2Ds with weights
+    # for each LAPPD
+    for id_index in range(len(AllHit2Ds[0])):
+        LAPPD_Hit_2D_thisID = [[] for __ in range(28)]
+        # summing all steps
+        for i in range(len(AllHit2Ds)):
+            for strip in range(28):
+                for hit in AllHit2Ds[i][id_index][strip]:
+                    y_index, hit_time, PE = hit
+                    # if find the same y_index in LAPPD_Hit_2D_thisID[strip], add PE*weights[i] to that hit
+                    # if not found, append this hit with new PE = PE*weights[i]
+    ''' 
+        
+
+    return Sim_Waveforms_sampled, pe_strip_samples, LAPPD_Hits_2D_Sumed
+
+
+def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False, sampleTimes = 20, saving = False, savePath ='waveforms.hdf5'):
+    mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
+    mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
+    print("mu_positions:", mu_position, mu_direction)
+    
+    Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid, phi_steps = phi_steps)
+    Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step)
+    updated_hits_withPE = proj.update_lappd_hit_matrices(
+        results_with_time=Results_withMuTime,       
+        absorption_wavelengths = LAPPD_profile.absorption_wavelengths,
+        absorption_coefficients = LAPPD_profile.absorption_coefficients,
+        qe_2d=LAPPD_profile.qe_2d,                               # QE 2D, normalized
+        gain_2d=LAPPD_profile.gain_2d,                           # gain distribution 2D, normlized
+        QEvsWavelength_lambda=LAPPD_profile.QEvsWavelength_lambda,    # QE vs wavelength, wavelength array
+        QEvsWavelength_QE=LAPPD_profile.QEvsWavelength_QE,            # QE vs wavelength, QE array
+        bin_size=LAPPD_profile.bin_size,                                    # wavelength bin size
+        #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
+        CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio,                 # capillary open ratio of MCP
+        phi_steps = phi_steps,
+        muon_step = muon_step,
+        weightingBy2D = weightingBy2D
+    )
+    
+    AllWaveforms = []
+    logP_list = []
+    pe_strip_samples = []
+    AllHit2Ds = []
+    PE_averaged = 0
+    
+    with h5py.File(savePath, 'w') as f:
+        max_shape = (None, )  
+        dset_p = f.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
+        dset_num = f.create_dataset("num", shape=(0,), maxshape=max_shape, dtype="i4")
+        dset_wave = f.create_dataset("wave", shape=(0, 28, 2, 256), maxshape=(None, 28, 2, 256), dtype="f4")
+
+        for i in range(sampleTimes):
+            sampled_hits_withPE, logP = sample_updatedHits_PE_Poisson(updated_hits_withPE)
+            LAPPD_Hit_2D, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1, reSampled = True)
+            if PE_averaged == 0:
+                PE_averaged = totalPE
+            else:
+                PE_averaged = (PE_averaged + totalPE)/2
+            print("totalPE is ", totalPE, PE_averaged)
+            
+            #print("LAPPD_Hit_2D:", LAPPD_Hit_2D)
+            # [id][[] for __ in range(28)] (y_idx, hit_time, expectedPE)
+            Sim_Waveforms_sampled, pe_strip_samples = proj.generate_lappd_waveforms(LAPPD_Hit_2D, LAPPD_profile.sPE_pulse_time, LAPPD_profile.sPE_pulse, LAPPD_profile.LAPPD_stripWidth, LAPPD_profile.LAPPD_stripSpace,  generatePE = True)
+            Sim_Waveforms_converted = np.array(ConvertWaveformSimOnly(Sim_Waveforms_sampled))
+            #print("Sim_Waveforms_converted shape:", Sim_Waveforms_converted.shape)
+            
+            dset_p.resize((i+1,))
+            dset_num.resize((i+1,))
+            dset_wave.resize((i+1, 28, 2, 256))
+            dset_p[i] = logP
+            dset_num[i] = totalPE
+            dset_wave[i] = Sim_Waveforms_converted
+            
+            AllHit2Ds.append(LAPPD_Hit_2D)
+            AllWaveforms.append(Sim_Waveforms_sampled)
+            logP_list.append(logP)
+            print(i, ", logP:", logP)
+        
+    logP_max = max(logP_list)
+    print("Find the maxP = ", logP_max, " prob = ", math.exp(logP_max))
+    # 2) 计算未归一化的概率 e^(logP - logP_max)，并累加
+    unnormalized_probs = []
+    for lp in logP_list:
+        # 做平移，防止 e^(非常大的负数) 直接下溢为 0
+        unnormalized_probs.append(math.exp(lp - logP_max))
+    sum_probs = sum(unnormalized_probs)
+    weights = [p / sum_probs for p in unnormalized_probs]
+    #print("shifted unnormed probs:", unnormalized_probs)
+    print("sum_probs:", sum_probs)
+    
+    
+    #print("normalized weights:", weights)
+    save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/4.NoInnerStructure/FirstTest_withHolder"
+
+    with open(save_directory+'/prob_data.txt', 'w') as f:
+        for up, w in zip(unnormalized_probs, weights):
+            f.write(f"{up}\t{w}\n")
+    
+    # sum AllWaveforms with weights
+    Sim_Waveforms_Sumed = []
+    for j in range(len(Sim_Waveforms_sampled)):
+        W = np.zeros((28, 2, 256))
+        for samp in range(sampleTimes):
+            W += np.array(AllWaveforms[samp][j])/sampleTimes #* weights[samp]
+        Sim_Waveforms_Sumed.append(W)
+        
+    # find the index of largest weight, save that AllHit2Ds to LAPPD_Hits_2D_Sumed
+    max_index = weights.index(max(weights))
+    LAPPD_Hits_2D_Sumed = AllHit2Ds[max_index]
+
+    return Sim_Waveforms_sampled, pe_strip_samples, LAPPD_Hits_2D_Sumed, PE_averaged
 
 
 def store_results_to_hdf5(output_hdf5_file, all_results):

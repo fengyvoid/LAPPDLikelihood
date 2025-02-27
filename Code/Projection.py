@@ -11,7 +11,7 @@ def process_photon_hits(particle_position, particle_direction, LAPPD_grids,
                         tolerance=0.007, PMTPosition=[(0.26489847,0.01038878,2.72413225, 0.254/2), (-0.2666204,0.00990167,2.72809739, 0.254/2), 
                                                       (0.27324662,-0.3994107,2.79745653, 0.2032/2), (-0.2689693,-0.4085338,2.79763283, 0.2032/2)], 
                         speed_of_light=2.98e8, phi_steps = 360):
-    
+    #print("LAPPD_grids: ",len(LAPPD_grids))
     KDTree_list = [KDTree(LAPPD_grid.reshape(-1, 3)) for LAPPD_grid in LAPPD_grids]
     
     min_tStep = (tolerance / 1.5) / speed_of_light
@@ -61,7 +61,7 @@ def process_photon_hits(particle_position, particle_direction, LAPPD_grids,
                     vector_to_hit /= np.linalg.norm(vector_to_hit)  
                     min_distance = distance  
                     propagation_distance = np.linalg.norm(hit_position - particle_position)
-                    propagation_time = propagation_distance / speed_of_light
+                    propagation_time = propagation_distance / (speed_of_light / 1.33)
                     first_index, second_index = np.unravel_index(idx, LAPPD_grids[LAPPD_index].shape[:2])
                     best_hit = [LAPPD_index, first_index, second_index, propagation_time, propagation_distance]
             
@@ -70,6 +70,7 @@ def process_photon_hits(particle_position, particle_direction, LAPPD_grids,
             if min_distance <= tolerance:
                 skip_hit = False
 
+                '''
                 for PMT in PMTPosition:
                     PMT_center = np.array(PMT[:3])
                     PMT_radius = PMT[3]
@@ -84,10 +85,12 @@ def process_photon_hits(particle_position, particle_direction, LAPPD_grids,
                     if min_dist_to_pmt < PMT_radius:  
                         skip_hit = True
                         break
-
+                '''
+                
                 if not skip_hit and best_hit is not None:
                     hit_results.append(best_hit)
                     Hitted = True
+                    #print("best_hit:", best_hit)
 
     return hit_results
 
@@ -146,11 +149,15 @@ def process_results_with_mu_time(results, step_size, speed_of_light = 2.998e8, s
 
 
 # calculate the PE number of each hit
-def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorption_coefficients , qe_2d, gain_2d, QEvsWavelength_lambda, QEvsWavelength_QE, bin_size=10, CapillaryOpenRatio = 0.6, phi_steps = 360, muon_step = 0.01):
+def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorption_coefficients , qe_2d, gain_2d, QEvsWavelength_lambda, QEvsWavelength_QE, bin_size=10, CapillaryOpenRatio = 0.6, phi_steps = 360, muon_step = 0.01, weightingBy2D = True):
     # Define wavelength bins and constants
     wavelengths = np.arange(200 + bin_size / 2, 601 + bin_size / 2, bin_size)
+    absorption_function = interpolate.interp1d(absorption_wavelengths, absorption_coefficients, kind='linear')
+    absorption_at_distance = absorption_function(wavelengths)
     
     updated_results = []
+    
+    updatedTotalPE = 0
 
     # Process hits
     for hits in results_with_time:
@@ -158,13 +165,12 @@ def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorpt
         for hit in hits:
             LAPPD_index, first_index, second_index, hit_time, photon_distance = hit
             # Interpolate absorption coefficient for the photon's distance
-            absorption_function = interpolate.interp1d(absorption_wavelengths, absorption_coefficients, kind='linear')
-            absorption_at_distance = absorption_function(wavelengths)
-            
+            #print("absorption_at_distance: ", absorption_at_distance)
             # Calculate after-absorption photon count
             initial_photons = 0.4513 * 370 * (muon_step/0.01) / phi_steps #sin theta_C ^2 * 370 pe per cm / 360 per degree (or phi step number)
+            #print(muon_step, phi_steps, initial_photons)
             after_absorption_photons = initial_photons * np.exp(-absorption_at_distance * photon_distance)
-
+            #print("after_absorption_photons: ", after_absorption_photons)
             # Sum of photoelectrons (PE) for the current hit across wavelength bins
             # need to consider Capillary Open Area Ratio 
             total_PE = 0
@@ -179,20 +185,26 @@ def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorpt
                 QE_function = interpolate.interp1d(QEvsWavelength_lambda[LAPPD_index], QEvsWavelength_QE[LAPPD_index], kind='linear', fill_value="extrapolate")
                 QE_at_wavelength = QE_function(wavelength)
                 PE_number = after_absorption_photons[i] * dE * QE_at_wavelength
+                #PE_number = initial_photons * dE * QE_at_wavelength
                 total_PE += PE_number 
+            #print('total PE for this hit: ', total_PE)
             
             total_PE = total_PE * CapillaryOpenRatio
 
             # Update the PE and time matrices for the hit
             # qe2d is symmetric, so which is first doesn't matter
-            weighted_pe = qe_2d[first_index, second_index] * gain_2d[first_index, second_index] * total_PE
-
+            weighted_pe = total_PE
+            if weightingBy2D:
+                weighted_pe = qe_2d[first_index, second_index] * gain_2d[first_index, second_index] * total_PE
+            # print("2d:", qe_2d[first_index, second_index], gain_2d[first_index, second_index], qe_2d[first_index, second_index] * gain_2d[first_index, second_index])
+            updatedTotalPE += weighted_pe
+            
             hit_withPE = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
             updated_results_this_particle_step.append(hit_withPE)
 
         updated_results.append(updated_results_this_particle_step)
 
-
+    # print("updatedTotalPE: ", updatedTotalPE)
     return updated_results
 
 # generate Gaussian distribution, using the pulse_start_time_ns + delay as the mean, use the sigma as the sigma, use the amplitude as the amplitude
@@ -273,11 +285,11 @@ def sample_updatedHits_PE_Poisson(hits_withPE, Poisson = True):
             sampled_pe = np.random.poisson(weighted_pe)
             if(Poisson == False):
                 sampled_pe = weighted_pe
-            if(sampled_pe != 0):
+            if(sampled_pe > 0.0001): # for some reason ==0 is not working
                 sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
     return sampled_hits_withPE
 
-def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = False):
+def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True):
     LAPPD_Hit_2D = []
     totalPE = 0
     
@@ -299,7 +311,7 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = False):
                 LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][6]))
             else:
                 LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
-            totalPE+=hits_withPE[i][j][5]
+            totalPE+=hits_withPE[i][j][6]
             
     return LAPPD_Hit_2D, totalPE
 
@@ -622,6 +634,10 @@ def convertToHit_2D_perTimeSlice_exp(hits_withPE, number_of_LAPPDs = 1, sliceInt
         
     return Final_LAPPD_Hit_2D_thisID, Final_total_pe_list, Final_total_probability_list, Final_total_hitNum_list
 
+
+
+
+
 def convertToHit_2D_perStepSlice_exp(hits_withPE, number_of_LAPPDs = 1, usingExpectedPEForEachHit = False):
     # with given hits_withPE, convert it to LAPPD_Hit_2D, and calculate the total PE for each LAPPD
     # but, redistribute the PE for each particle step
@@ -697,6 +713,8 @@ def convertToHit_2D_perStepSlice_exp(hits_withPE, number_of_LAPPDs = 1, usingExp
         Final_total_probability_list.append(total_probability_thisID)
         Final_total_hitNum_list.append(total_hitNum_thisID)
         
+        print("total_probability_thisID: ", total_probability_thisID)
+        
     return Final_LAPPD_Hit_2D_thisID, Final_total_pe_list, Final_total_probability_list, Final_total_hitNum_list
 
 # 使用sPE和hit info来生成waveform
@@ -745,7 +763,7 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
 
     #just assume a fixed number 
     crossTalk_Amp = 0.045 # percentage
-    crossTalk_TimeDelay = 0.09 #ns
+    crossTalk_TimeDelay = 0.09 #ns per strip
 
 
     index = np.argmax(sPEPulseAmp)
@@ -756,10 +774,8 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
     for lappd_hits in LAPPD_Hits_2D:
         LAPPD_PE_perStrip = np.zeros(28)
         for x in range(28):
-            #print("generating",x)
             for hit in lappd_hits[x]:
                 LAPPD_PE_perStrip[x] += hit[2]
-            #print(LAPPD_PE_perStrip)
         LAPPD_PEs_AllLAPPDs.append(LAPPD_PE_perStrip)
     
 
