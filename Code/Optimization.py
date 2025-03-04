@@ -10,6 +10,9 @@ import DataClass as dc
 import random
 import math
 import os
+import math
+from math import lgamma, log, sqrt, pi, exp
+import scipy.stats as stats
 
 import json
 import h5py
@@ -386,6 +389,7 @@ def sample_updatedHits_PE_Poisson(hits_withPE):
                 sampled_hits_withPE[step].append(new_hit)
     
     #print("logP_total: ", logP_total)
+    # e based logP_total
     return sampled_hits_withPE, logP_total
 
 
@@ -1750,6 +1754,289 @@ def DoProjectionForWaveform(LAPPD_profile, mu_position, mu_direction, muon_step 
         
 
     return Sim_Waveforms_sampled, pe_strip_samples, LAPPD_Hits_2D_Sumed
+
+# this is for probability study.
+# given a muon topology, we need four functions:
+# 1) DoProjectionForHits: given a muon topology, return the hits on LAPPD surface.
+# 2) HitsToPDF: given the hits on LAPPD surface, return the PDF of the hits. This hits will be used to generate a PDF purely based on position.
+# 3) HitsToSampledHits: given the hits on LAPPD surface, return the sampled hits. Each sampled hits will be (x, y, time, PE)
+# 4) SampledHitsTo2DHits: given the sampled hits, return the 2D hits. Each 2D hits will be (y_idx, hit_time, expectedPE)
+# 5) 2DHitsProbability: given the position based PDF, PDF[x][y] = (n PE, t), and the sampled 2D hits, return the probability
+
+def DoProjectionForHits(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False):
+    mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
+    mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
+    
+    Results = proj.parallel_process_positions(mu_positions, mu_direction, LAPPD_profile.grid, phi_steps = phi_steps)
+    Results_withMuTime = proj.process_results_with_mu_time(Results, muon_step)
+    updated_hits_withPE = proj.update_lappd_hit_matrices(
+        results_with_time=Results_withMuTime,       
+        absorption_wavelengths = LAPPD_profile.absorption_wavelengths,
+        absorption_coefficients = LAPPD_profile.absorption_coefficients,
+        qe_2d=LAPPD_profile.qe_2d,                               # QE 2D, normalized
+        gain_2d=LAPPD_profile.gain_2d,                           # gain distribution 2D, normlized
+        QEvsWavelength_lambda=LAPPD_profile.QEvsWavelength_lambda,    # QE vs wavelength, wavelength array
+        QEvsWavelength_QE=LAPPD_profile.QEvsWavelength_QE,            # QE vs wavelength, QE array
+        bin_size=LAPPD_profile.bin_size,                                    # wavelength bin size
+        #CapillaryOpenRatio = 0.64                       # capillary open ratio of MCP
+        CapillaryOpenRatio = LAPPD_profile.CapillaryOpenRatio,                 # capillary open ratio of MCP
+        phi_steps = phi_steps,
+        muon_step = muon_step,
+        weightingBy2D = weightingBy2D
+    )
+    
+    # updated_hits_withPE[particle step][hit], hit = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe)
+    # second index is the strip number from negative X to positive X, first index is the position on the strip from bottom to top.
+    return updated_hits_withPE
+    
+def HitsToPDF(hits_withPE, targetLAPPDIndex):
+    
+    PDFMap = np.zeros((28,28,2)) # x (strip), y (height), (nPE, t)
+    for hits_step in hits_withPE:
+        for hit in hits_step:
+            LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe = hit
+            if(LAPPD_index == targetLAPPDIndex):
+                if PDFMap[second_index][first_index][0] == 0:
+                    PDFMap[second_index][first_index][0] = weighted_pe
+                    PDFMap[second_index][first_index][1] = hit_time
+                else:
+                    pe0 = PDFMap[second_index][first_index][0]
+                    t0 = PDFMap[second_index][first_index][1]
+                    PDFMap[second_index][first_index][0] = (pe0 + weighted_pe)/2
+                    PDFMap[second_index][first_index][1] = (pe0*t0 + weighted_pe*hit_time)/(pe0 + weighted_pe)
+
+    return PDFMap
+    
+    
+def HitsToSampledHits(hits_withPE):
+    sampled_hits, logP_eBase = sample_updatedHits_PE_Poisson(hits_withPE)
+    
+    return sampled_hits, logP_eBase
+
+def SampledHitsTo2DHits(sampled_hits, targetLAPPDIndex):
+    # sampled_hits[step][i] = (LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe, sampled_pe)
+    
+    TwoDHits = np.zeros((28, 28, 2)) # x (strip), y (height), (nPE, t)
+    for hits_step in sampled_hits:
+        for hit in hits_step:
+            LAPPD_index, first_index, second_index, hit_time, photon_distance, weighted_pe, sampled_pe = hit
+            if(LAPPD_index == targetLAPPDIndex):
+                if sampled_pe > 0:
+                    if TwoDHits[second_index][first_index][0] == 0:
+                        TwoDHits[second_index][first_index][0] = sampled_pe
+                        TwoDHits[second_index][first_index][1] = hit_time
+                    else:
+                        pe0 = TwoDHits[second_index][first_index][0]
+                        t0 = TwoDHits[second_index][first_index][1]
+                        TwoDHits[second_index][first_index][0] = (pe0 + sampled_pe)/2
+                        TwoDHits[second_index][first_index][1] = (pe0*t0 + sampled_pe*hit_time)/(pe0 + sampled_pe)
+
+    return TwoDHits
+
+
+def Hits2DProbability(PDFMap, TwoDHits, fillEmpty = True, sigmaT = 0.1*1e-9, usingTimeP = True, tStep = 0.05*1e-9, MaxTShift = 1e-9):
+    # loop all hits in TwoDHits, calculate the probability with PDFMap.
+    # while found one hit in TwoDHits that PDFMap doesn't have any information at it's position:
+    #   if fillEmpty == False, skip this hit.
+    #   if fillEmpty == True, find the information for all nearing positions in PDFMap, and average them as the PDF for this hit.
+    
+    # TwoDHits[strip][y_idx] = (nPE, t)
+    # PDFMap[strip][y_idx] = (nPE, t)
+    # calculate the possion probability in log
+    Probabilities = np.zeros((28, 28))
+    ProbabilityLog = 0
+    
+    # ----------------------
+    # 1) 计算加权平均 T_hits_avg, T_map_avg
+    # ----------------------
+    sum_hit_pe = 0.0
+    sum_hit_pe_t = 0.0
+    sum_map_pe = 0.0
+    sum_map_pe_t = 0.0
+
+    for i in range(28):
+        for j in range(28):
+            nPE_hits = TwoDHits[i, j, 0]
+            t_hits = TwoDHits[i, j, 1]
+            if nPE_hits > 0:
+                sum_hit_pe += nPE_hits
+                sum_hit_pe_t += nPE_hits * t_hits
+            
+            nPE_map = PDFMap[i, j, 0]
+            t_map = PDFMap[i, j, 1]
+            if nPE_map > 0:
+                sum_map_pe += nPE_map
+                sum_map_pe_t += nPE_map * t_map
+
+    T_hits_avg = sum_hit_pe_t / sum_hit_pe if sum_hit_pe > 0 else 0.0
+    T_map_avg = sum_map_pe_t / sum_map_pe if sum_map_pe > 0 else 0.0
+    shift_0 = T_hits_avg - T_map_avg
+    
+    # ----------------------
+    # 2) 在 [shift_0 - MaxTShift, shift_0 + MaxTShift] 范围内
+    #    以 tStep 为步长搜索最优 shift
+    # ----------------------
+    shift_candidates = np.arange(shift_0 - MaxTShift,
+                                 shift_0 + MaxTShift,
+                                 tStep)
+    best_shift = 0.0
+    best_log_prob = -np.inf
+    shift_log_probs = []       
+    
+    #print("T_hits_avg = ", T_hits_avg, ", T_map_avg = ", T_map_avg)
+    #print("shift_0 = ", shift_0)
+    #print("shift_candidates:", shift_candidates)
+    
+    def compute_total_log_prob(shift_val):
+        # 计算给定 shift_val 下的总对数概率
+        total_log_p = 0.0
+        for i in range(28):
+            for j in range(28):
+                nPE_hits = TwoDHits[i, j, 0]
+                t_hits = TwoDHits[i, j, 1]
+                
+                # 如果该点在 Hits 中压根没PE，可以直接跳过对概率的贡献
+                if nPE_hits < 1e-9:
+                    continue
+
+                nPE_map = PDFMap[i, j, 0]
+                t_map = PDFMap[i, j, 1]
+
+                # 若 PDFMap 中没有信息，看 fillEmpty 是否需要做邻域填充
+                if nPE_map < 1e-9:
+                    if fillEmpty:
+                        nPE_fill, t_fill = fill_empty_pdf(i, j, PDFMap)
+                        if nPE_fill > 0:
+                            nPE_map = nPE_fill
+                            t_map = t_fill
+                        else:
+                            continue
+                    else:
+                        continue
+
+                log_p = log_poisson_pmf(nPE_hits, nPE_map)
+                if usingTimeP:
+                    log_p += log_nearby_probability(t_hits, t_map + shift_val, sigmaT)
+                total_log_p += log_p
+
+        return total_log_p
+    # 遍历所有 shift_candidates，找最大值
+    for s in shift_candidates:
+        lp = compute_total_log_prob(s)
+        shift_log_probs.append(lp)
+        if lp > best_log_prob:
+            best_log_prob = lp
+            best_shift = s
+
+    # ----------------------
+    # 3) 用 best_shift 重新计算并输出最终结果
+    # ----------------------
+    Probabilities = np.zeros((28, 28), dtype=float)
+    ProbabilityLog = 0.0
+    
+    for i in range(28):
+        for j in range(28):
+            nPE_hits = TwoDHits[i, j, 0]
+            t_hits = TwoDHits[i, j, 1]
+            if nPE_hits < 1e-9:
+                Probabilities[i,j] = 1.0
+                continue
+            nPE_map = PDFMap[i, j, 0]
+            t_map = PDFMap[i, j, 1]
+            if nPE_map < 1e-9:
+                if fillEmpty:
+                    nPE_fill, t_fill = fill_empty_pdf(i, j, PDFMap)
+                    if nPE_fill > 0:
+                        nPE_map = nPE_fill
+                        t_map = t_fill
+                    else:
+                        Probabilities[i,j] = 1.0
+                        continue
+                else:
+                    Probabilities[i,j] = 1.0
+                    continue
+            lp = log_poisson_pmf(nPE_hits, nPE_map)
+            if usingTimeP:
+                lp += log_nearby_probability(t_hits, t_map + best_shift, sigmaT)
+
+            p_val = np.exp(lp)
+            #print("i = ", i, ", j = ", j, ", nPE_hits = ", nPE_hits, ", nPE_map = ", nPE_map, ", t_hits = ", t_hits, ", t_map = ", t_map, ", lp_poi = ", log_poisson_pmf(nPE_hits, nPE_map),", lp_t = ",log_nearby_probability(t_hits, t_map + best_shift, sigmaT),", lp = ", lp ,", p_val = ", p_val)
+            Probabilities[i, j] = p_val
+            ProbabilityLog += lp
+            
+    # probability at all positions, total probability in e based log, shift time, log probability for all shifts, best shift
+    return Probabilities, ProbabilityLog, shift_candidates, np.array(shift_log_probs), best_shift
+    
+
+def log_poisson_pmf(k, lam):
+    """
+    计算泊松分布的 log P(k|lam)
+    为防止数值出错，如果 lam <= 0:
+       - 当 k == 0: 返回 0 (相当于概率=1)
+       - 否则返回 -np.inf
+    """
+    if lam <= 0:
+        return 0.0 if (k == 0) else -np.inf
+    # log( lam^k e^{-lam} / k! ) = k*log(lam) - lam - log(k!)
+    return k*log(lam) - lam - lgamma(k+1)
+
+'''
+def log_normal_pdf(x, mu, sigma):
+    """
+    计算正态分布的 log P(x|mu, sigma)
+    """
+    if sigma <= 0:
+        return -np.inf
+    return -0.5 * ((x - mu) / sigma)**2 - log(sqrt(2.0 * pi) * sigma)
+    
+'''
+
+def log_normal_pdf(x, mu, sigma):
+    """
+    计算正态分布的对数概率密度
+    log P(x | mu, sigma)
+    公式: -0.5 * ((x - mu) / sigma) ** 2 - log(sqrt(2π) * sigma)
+    """
+    if sigma <= 0:
+        return -np.inf  # 防止 sigma 取 0 或负数
+    
+    z = (x - mu) / sigma
+    term1 = -0.5 * z * z
+    term2 = -np.log(sigma) - 0.5 * np.log(2.0 * np.pi)
+    
+    return term1 + term2
+
+def log_nearby_probability(x, mu, sigma):
+    """
+    计算在给定 x 附近的概率：取一个 x*0.01 的区间，乘以 x 处的概率密度，然后转换成 log 表示。
+    """
+    interval = x * 0.01  # 计算区间宽度
+    pdf_value = np.exp(log_normal_pdf(x, mu, sigma))  # 计算 x 处的概率密度
+    probability = pdf_value * interval  # 计算区间内的概率
+    return np.log(probability) if probability > 0 else -np.inf  # 取对数
+
+def fill_empty_pdf(i, j, PDFMap):
+    """
+    当 fillEmpty=True 并且 (i,j) 处 PDFMap 没有有效信息 (nPE=0)，
+    则在邻近位置(3x3)里找有值的点，求平均 nPE 和平均 t。
+    如果找不到任何邻域点，则返回 (0,0) 以示失败。
+    
+    这里示例只查 3x3 邻域，可自行改为更大范围。
+    """
+    neighbors = []
+    for di in [-1, 0, 1]:
+        for dj in [-1, 0, 1]:
+            ni = i + di
+            nj = j + dj
+            if 0 <= ni < PDFMap.shape[0] and 0 <= nj < PDFMap.shape[1]:
+                if PDFMap[ni, nj, 0] > 0:
+                    neighbors.append(PDFMap[ni, nj])
+    if len(neighbors) == 0:
+        return (0.0, 0.0)  # 表示失败
+    arr = np.array(neighbors)
+    # arr[:,0] 是 nPE，arr[:,1] 是 t
+    return (np.mean(arr[:,0]), np.mean(arr[:,1]))
+
 
 
 def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False, sampleTimes = 20, saving = False, savePath ='waveforms.hdf5'):
