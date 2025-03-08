@@ -1938,6 +1938,10 @@ def Hits2DProbability(PDFMap, TwoDHits, fillEmpty = True, sigmaT = 0.1*1e-9, usi
         for j in range(28):
             nPE_hits = TwoDHits[i, j, 0]
             t_hits = TwoDHits[i, j, 1]
+            #if(t_hits == 0):
+            #    print("t_hits = 0")
+            #    continue
+                
             if nPE_hits < 1e-9:
                 Probabilities[i,j] = 1.0
                 continue
@@ -1956,7 +1960,7 @@ def Hits2DProbability(PDFMap, TwoDHits, fillEmpty = True, sigmaT = 0.1*1e-9, usi
                     Probabilities[i,j] = 1.0
                     continue
             lp = log_poisson_pmf(nPE_hits, nPE_map)
-            if usingTimeP:
+            if usingTimeP and t_hits > 0:
                 lp += log_nearby_probability(t_hits, t_map + best_shift, sigmaT)
 
             p_val = np.exp(lp)
@@ -2013,6 +2017,8 @@ def log_nearby_probability(x, mu, sigma):
     interval = x * 0.01  # 计算区间宽度
     pdf_value = np.exp(log_normal_pdf(x, mu, sigma))  # 计算 x 处的概率密度
     probability = pdf_value * interval  # 计算区间内的概率
+    if(probability<0):
+        print("x = ", x, ", mu = ", mu, ", sigma = ", sigma, ", pdf_value = ", pdf_value, ", interval = ", interval, ", probability = ", probability)
     return np.log(probability) if probability > 0 else -np.inf  # 取对数
 
 def fill_empty_pdf(i, j, PDFMap):

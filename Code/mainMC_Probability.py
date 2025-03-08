@@ -60,8 +60,8 @@ if __name__ == "__main__":
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
     save_result_path = basePath + 'OptimizationResults/5.Probability/output/'
-    h5filePath = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/5.Probability/output/'
-
+    h5filePath = basePath + 'OptimizationResults/5.Probability/output/'
+    
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
         sys.exit(1)
@@ -88,6 +88,8 @@ if __name__ == "__main__":
     #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_y+0.04_500.root'
 
     root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/innerStructure/ANNIETree_MC_noInnerStructure.root'
+    
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/rootTree_noInner_10cmStep/ANNIETree_MC_x0_y-2_dirx1_diry1.root'
     
     SelectEntry = False
     entry = 131
@@ -476,11 +478,11 @@ if __name__ == "__main__":
                 # the x and y Step for center is 0,0
                 # [sampling number][muon position, muon direction, sampled_2Dhits, logP_center, center information, [shifted information at all positions]]
                 
-                SampleTimes = 2
-                mu_dx = 0.05
-                mu_dy = 0.05
-                mu_dx_step = 5
-                mu_dy_step = 5                
+                SampleTimes = 1
+                mu_dx = 0.0067
+                mu_dy = 0.0067
+                mu_dx_step = 0.5
+                mu_dy_step = 20
                 LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
                 
                 
@@ -512,11 +514,13 @@ if __name__ == "__main__":
                         center_group.create_dataset("logP_shiftTs", data=logP_shiftTs_center)
                         center_group.create_dataset("best_shiftT", data=best_shiftT_center)
                         
+                        #print("PvsPosition_center: ", PvsPosition_center)
+                        print("PLog_center: ", PLog_center)
                         # 偏移信息组
                         shifted_group = samp_group.create_group("shifted_info")
                 
-                        for xStep in range(1, int(mu_dx_step*2)):
-                            for yStep in range(1, int(mu_dx_step*2)):
+                        for xStep in range(0, int(mu_dx_step*2)):
+                            for yStep in range(1, int(mu_dy_step*2)):
                                 print("Making step: ", xStep, yStep)
                                 
                                 shiftedPosition = [test_position[0] + (xStep-mu_dx_step)*mu_dx, test_position[1] + (yStep-mu_dy_step)*mu_dy, test_position[2]]
