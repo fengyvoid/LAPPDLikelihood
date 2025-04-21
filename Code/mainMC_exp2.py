@@ -58,8 +58,8 @@ if __name__ == "__main__":
     beam_data_path = basePath + 'data/'
     LAPPD_profile_path = basePath + 'LAPPDProfile/'
     plot_save_path = basePath + 'MC_plots/'
-    save_result_path = basePath + 'OptimizationResults/8.PrepareForDQM/output/'
-    h5filePath = basePath + 'OptimizationResults/8.PrepareForDQM/output/Waveforms'
+    save_result_path = basePath + 'OptimizationResults/6.waveforms_ct/output2/'
+    h5filePath = basePath + 'OptimizationResults/6.waveforms_ct/output2/Waveforms'
 
     if not os.path.exists(basePath):
         print(f"Error: Base path '{basePath}' does not exist.")
@@ -77,8 +77,7 @@ if __name__ == "__main__":
     MCrunNumber = 0
     MCSubRunNumber = 0
 
-    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/8.PrepareForDQM/waveforms/noInnerStructure/ANNIETree_MC_x0_y0_dirx-1_diry0.root'
-
+    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/6.waveforms_ct/Event120_paper/LAPPD_movedDown/shiftedY-2/ANNIETree_MC_x1_y-2_dirx0_diry0.root'
     
     SelectEntry = False
     entry = 131
@@ -88,7 +87,7 @@ if __name__ == "__main__":
 
 
     processStartEntry = 0
-    processEventNumber = 500
+    processEventNumber = 50
 
     pdfName = 'EventDisplay.pdf'
     printEventNumber = 0
@@ -137,7 +136,7 @@ if __name__ == "__main__":
 
     # for MC root tree
     cut_LAPPDTubeID = True
-    TargetTubeID = [517] # 1244 for all tubes, 584 for with inner, 517 for without inner
+    TargetTubeID = [1244]
     cut_HitPENumber = True
     HitPENumber = 40
     cut_TotalLAPPDHitPE = True
@@ -155,7 +154,7 @@ if __name__ == "__main__":
     muon_prop_steps = 500 # max number
     muon_start_Z = 1.2 # in meter
     phi_steps = 360 # how many rays on phi direction
-    SampleIntergerHitPE = True
+    SampleIntergerHitPE = False
     
 
     #########################################
@@ -173,12 +172,9 @@ if __name__ == "__main__":
     # make some LAPPD grids
     #LAPPD_Centers = [[0,-0.2255,2.951], [-0.898, -0.2255 + 0.5, 2.579], [0.898, -0.2255 - 0.5 , 2.579]]
     #LAPPD_Centers = [[0,-0.2255,2.951]] # center of LAPPD 40
-    
-    #LAPPD_Centers = [[0, -0.261 , 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
+    LAPPD_Centers = [[0, -0.261 , 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
 
-    LAPPD_Centers = [[0, -0.144 - 0.1192 , 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
-    #LAPPD_Centers = [[0, -0.144, 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
-    #LAPPD_Centers = [[0, - 0.1192 , 1.2677543 + 1.681]]
+    #LAPPD_Centers = [[0, 0 , 1.2677543 + 1.681]] # z = 2.948, this is the WCSim position?
 
 
     LAPPD_Directions = [[0,0,-1], [1,0,-1], [-1,0,-1]]
@@ -202,7 +198,7 @@ if __name__ == "__main__":
     qe_data_63 = pd.read_csv(qe_file_63)
 
     wavelength25 = qe_data_25['Wavelength (nm)'].values
-    QE25 = qe_data_25['Average QE'].values/3
+    QE25 = qe_data_25['Average QE'].values
     
     #print("wavelength25",wavelength25)
     #print("QE25 is ",QE25)
@@ -373,6 +369,7 @@ if __name__ == "__main__":
             #########################################
             ######## start to process the event #####
             #########################################
+
             a = 0
             if (not processThisEntry):
                 a+=1
@@ -385,7 +382,7 @@ if __name__ == "__main__":
                 
                 # Construct the waveform from MCHits
                 # select hits on one LAPPD
-                fitLAPPDTubeID = TargetTubeID[0]
+                fitLAPPDTubeID = 1244
                 mask = np.where(LHitTubeIDs == fitLAPPDTubeID)
                 LHitXs_fit = LHitXs[mask]*100
                 LHitYs_fit = LHitYs[mask]*100
@@ -407,7 +404,7 @@ if __name__ == "__main__":
                         LAPPD_MCHit_2D[i].append([])
                         
                 #print("LHitXs_fit:", LHitXs_fit)
-                numOfHits = 0
+
                 for index, x in enumerate(LHitXs_fit):
                     step = int(abs(x - XStart) / LAPPD_gridSize)
                     if 0 <= step < 28:
@@ -415,19 +412,10 @@ if __name__ == "__main__":
                         YStep = int(abs(YPos - YStart) / LAPPD_gridSize)
                         #print("XStart:", XStart, "YStart:", YStart, "x:", x, "YPos:", YPos, "step:", step, "YStep:", YStep)
                         if 0 <= YStep < 28:
-                            #if numOfHits == 65:
-                            #    break
                             hit = (YStep, (LHitTimes_fit[index] % 25.0)*1e-9, 1)
                             LAPPD_MCHit_2D[0][step].append(hit)
-                            numOfHits += 1
-
-                #print("Include Number of hits on LAPPD 0:", numOfHits)
-                #MCHitNum = len(LHitXs_fit)
-                MCHitNum = numOfHits
-                
-                if MCHitNum < 20:
-                    continue
-                print("got MCHitNum:", MCHitNum, " at event number:", totalNumOfEvent)
+            
+                MCHitNum = len(LHitXs_fit)
                 #print("Got MCHitNum:", MCHitNum, " from ", len(LHitTimes_fit))
                 Data_Waveform = proj.generate_lappd_waveforms(LAPPD_MCHit_2D, sPE_pulse_time, sPE_pulse, LAPPD_stripWidth, LAPPD_stripSpace)
                 #Data_Waveform[LAPPD_id][strip number][0=dowm, 1=up][256]

@@ -1,0 +1,23 @@
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_{MCrunNumber}_{MCSubRunNumber}.root'
+    
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/tree_95-99/mergedEventTree_95_0.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/MCDataView/MCTrees/ANNIETree_MC_*.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/ANNIETree_MC_mu_lr_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_y0.03_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_xDir-0.45_500.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_downUp.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/gridPoints/shiftYDir/ANNIETree_MC_mu_lr_y+0.04_500.root'
+
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/innerStructure/ANNIETree_MC_noInnerStructure.root'
+    
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/ShadowingPlots/someRootTrees/ANNIETree_MC_x-4_y-2_dirx-1_diry1_noInner.root'
+    #root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/2025.2.4_WCSimReco/ShadowingPlots/someRootTrees/ANNIETree_MC_x-4_y-2_dirx-1_diry1_withInner.root'
+    
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/LAPPD40_beam_oldVersion/WCSimAnalysis/ANNIETree_MC_withInner.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/LAPPD40_beam_oldVersion/WCSimAnalysis/ANNIETree_MC_noInner.root'
+    root_file_pattern = f'/Users/fengy/ANNIESofts/Analysis/LAPPD40_beam_oldVersion/WCSimAnalysis/rootTree_284/ANNIETree_MC_withInner_XDir+0.05.root'
+    
+    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/LAPPD40_beam_oldVersion/WCSimAnalysis/rootTree_120/ANNIETree_MC_withInner_Center.root'
+
+    #root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/LAPPD40_beam_oldVersion/WCSimAnalysis/rootTree_120/ANNIETree_MC_withInner_Ydir+0.03.root'
+    

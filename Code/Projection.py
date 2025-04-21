@@ -6,6 +6,7 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from scipy import interpolate
 import math
+import os
 
 def process_photon_hits(particle_position, particle_direction, LAPPD_grids, 
                         tolerance=0.007, PMTPosition=[(0.26489847,0.01038878,2.72413225, 0.254/2), (-0.2666204,0.00990167,2.72809739, 0.254/2), 
@@ -207,6 +208,16 @@ def update_lappd_hit_matrices(results_with_time, absorption_wavelengths, absorpt
     # print("updatedTotalPE: ", updatedTotalPE)
     return updated_results
 
+def logNorm(x, t0, U = 7, tau = 27.23235183, sigma = 0.367):
+    # x is the bin value, t0 is the pulse start time
+    x = np.array(x)
+    y = np.zeros_like(x, dtype=np.float64)
+    valid = x > t0
+    with np.errstate(divide='ignore', invalid='ignore'):
+        power = -0.5 * (np.log((x[valid] - t0) / tau) / sigma) ** 2
+        y[valid] = U * np.exp(power)
+    return y
+
 # generate Gaussian distribution, using the pulse_start_time_ns + delay as the mean, use the sigma as the sigma, use the amplitude as the amplitude
 def generate_crossTalk_for_strip(hit_list, delay, amplitude, sigma, LAPPD_gridSize, strip_direction, speed_of_light = 2.998e8):
     waveform = np.zeros(256)
@@ -218,9 +229,11 @@ def generate_crossTalk_for_strip(hit_list, delay, amplitude, sigma, LAPPD_gridSi
             continue
         # 计算 pulse 起始时间（以 ns 为单位）
         if strip_direction == "down":
-            pulse_start_time_ns = (y_pos ) / (0.567 * speed_of_light) + hit_time * 1e9
+            #pulse_start_time_ns = (y_pos ) / (0.567 * speed_of_light) + hit_time * 1e9
+            pulse_start_time_ns = ((y_pos ) / (0.567 * speed_of_light)/100 + hit_time) * 1e9
         elif strip_direction == "up":
-            pulse_start_time_ns = (28*LAPPD_gridSize - y_pos ) / (0.567 * speed_of_light) + hit_time * 1e9
+            #pulse_start_time_ns = (28*LAPPD_gridSize - y_pos ) / (0.567 * speed_of_light) + hit_time * 1e9
+            pulse_start_time_ns = ((28*LAPPD_gridSize - y_pos ) / (0.567 * speed_of_light)/100 + hit_time )* 1e9
 
         
         # 将 pulse 映射到 waveform 的时间轴，0.1ns 为一个 bin
@@ -230,7 +243,7 @@ def generate_crossTalk_for_strip(hit_list, delay, amplitude, sigma, LAPPD_gridSi
             bin_time_ns = i * 0.1  # 每个 bin 代表 0.1ns
             pulse_time_ns = bin_time_ns - pulse_start_time_ns - delay  # 相对于 pulse 起始时间的时间差
 
-            if i < binStartTime or i > binStartTime+100:
+            if i < binStartTime-30 or i > binStartTime+50:
                 continue
             
             # 计算该 bin 对应的 pulse amplitude（使用线性插值）
@@ -289,7 +302,7 @@ def sample_updatedHits_PE_Poisson(hits_withPE, Poisson = True):
                 sampled_hits_withPE[step].append((LAPPD_index, first_index, second_index, hit_time, photon_distance, sampled_pe))
     return sampled_hits_withPE
 
-def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True):
+def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True, dt = 5e-9):
     LAPPD_Hit_2D = []
     totalPE = 0
     
@@ -307,10 +320,11 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True):
             # each second index is a strip, loop the first index to get all positions on that strip
             if(hits_withPE[i][j][0]>=number_of_LAPPDs):
                 continue
+           # print("hit time", hits_withPE[i][j][3])
             if(reSampled):
-                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][6]))
+                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3]+dt, hits_withPE[i][j][6]))
             else:
-                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3], hits_withPE[i][j][5]))
+                LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3]+dt, hits_withPE[i][j][5]))
             totalPE+=hits_withPE[i][j][6]
             
     return LAPPD_Hit_2D, totalPE
@@ -718,44 +732,71 @@ def convertToHit_2D_perStepSlice_exp(hits_withPE, number_of_LAPPDs = 1, usingExp
     return Final_LAPPD_Hit_2D_thisID, Final_total_pe_list, Final_total_probability_list, Final_total_hitNum_list
 
 # 使用sPE和hit info来生成waveform
-def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize, speed_of_light, strip_direction):
+def generate_waveform_for_strip(hit_list, pulse_time, sPE_pulse, LAPPD_gridSize, speed_of_light, strip_direction, sPE_amp = 7, sPE_sigma = 2, useLogNorm = True):
     waveform = np.zeros(256)
+    #sPE_amp = 15
     
-    # 创建插值函数，从 pulse_time 和 sPE_pulse 生成 pulse amplitude
-    sPE_interp = interp1d(pulse_time, sPE_pulse, kind='linear', bounds_error=False, fill_value=0)
+    randomAmp = False
+    signalDecay = False
+        
+    #amps_file = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/6.waveforms_ct/output/amps.txt'
+    #mode = 'a' if os.path.exists(amps_file) else 'w'
 
-
-
+    #with open(amps_file, mode) as f:
     for hit in hit_list:
         hit_y, hit_time, hit_pe = hit
         hit_pe = weightedGain(hit_pe)
+        
+        if randomAmp:
+            # randomly generate a sPE pulse peak value using the amp and the sigma
+            sPE_peak = np.random.normal(sPE_amp, sPE_sigma)
+            #f.write(f"{sPE_peak}\n")
+            sPE_scaled = sPE_pulse / max(sPE_pulse) * sPE_peak
+            sPE_pulse = sPE_scaled
+            #print("random sPE peak: ", sPE_peak, sPE_pulse)
+            
+        if signalDecay:
+            if strip_direction == "down":
+                sPE_scaled = sPE_pulse * (1 - 0.1/28*hit_y)
+                #print(hit_y, 1 - 0.1/28*hit_y)
+            elif strip_direction == "up":
+                sPE_scaled = sPE_pulse * (1 - 0.1/28*(28-hit_y))
+            sPE_pulse = sPE_scaled
+        
+        sPE_interp = interp1d(pulse_time, sPE_pulse, kind='linear', bounds_error=False, fill_value=0)
+
+
         y_pos = (hit_y+0.5) * LAPPD_gridSize  # hit_y 为 strip index，需要转换为坐标
         if hit_time is None or hit_time ==0:
             continue
         # 计算 pulse 起始时间（以 ns 为单位）
-
         if strip_direction == "down":
             pulse_start_time_ns = ((y_pos ) / (0.567 * speed_of_light)/100 + hit_time) * 1e9
             #print("y_pos: ", y_pos, "hit_time: ", hit_time, "pulse_start_time_ns: ", pulse_start_time_ns, "speed_of_light: ", speed_of_light, "prop time", (y_pos ) / (0.567 * speed_of_light))
         elif strip_direction == "up":
             pulse_start_time_ns = ((28*LAPPD_gridSize - y_pos ) / (0.567 * speed_of_light)/100 + hit_time )* 1e9
 
+        #print("sPE_pulse: ", max(sPE_pulse))
         
+        pulse_peak = max(sPE_pulse)
         # 将 pulse 映射到 waveform 的时间轴，0.1ns 为一个 bin
         for i in range(256):
             bin_time_ns = i * 0.1  # 每个 bin 代表 0.1ns
             pulse_time_ns = bin_time_ns - pulse_start_time_ns  # 相对于 pulse 起始时间的时间差
+            #print("bin i: ", i, "pulse_start_time_ns: ", pulse_start_time_ns, "pulse_time_ns: ", pulse_time_ns)
+            #pulse_amplitude = sPE_interp(pulse_time_ns)
+            if useLogNorm:
+                pulse_amplitude = logNorm(pulse_time_ns*10 + 27.23, 0, U = pulse_peak) # shift the pulse peak time to the pulse_time_ns
+            else:
+                pulse_amplitude = sPE_interp(pulse_time_ns)
             
-            # 计算该 bin 对应的 pulse amplitude（使用线性插值）
-            pulse_amplitude = sPE_interp(pulse_time_ns)
-            
-            # 将 pulse_amplitude 乘以 hit_pe 加入 waveform 中
             waveform[i] += hit_pe * pulse_amplitude
 
     return waveform
 
 
-def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True, generatePE = False):
+def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stripWidth, LAPPD_stripSpace, generateCrossTalk = True, generatePE = False, useLogNorm = False):
+    generateCrossTalk = True
     LAPPD_waveforms_AllLAPPDs = []
     LAPPD_PEs_AllLAPPDs = []
     LAPPD_gridSize = LAPPD_stripWidth + LAPPD_stripSpace
@@ -768,6 +809,11 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
 
     index = np.argmax(sPEPulseAmp)
     max_pulse_time = sPEPulseTime[index]
+    print("max_pulse_time: ", max_pulse_time)
+    if useLogNorm:
+        max_pulse_time = 2.723
+    
+    # max_pulse_time is ~ 1.797 ns for LAPPD 40 sPE
     
     # calculate number of pe on each channel
     # LAPPD_Hit_2D[LAPPD_idx][x_idx].append((y_idx, hit_time, expectedPE, sampledPE))
@@ -790,8 +836,8 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
             # a list of all hits with (hit_y, hit_time, hit_pe)
 
             if len(hits_here) > 0:
-                waveform_down = generate_waveform_for_strip(hits_here, sPEPulseTime, sPEPulseAmp, LAPPD_gridSize, speed_of_light,  "down")
-                waveform_up = generate_waveform_for_strip(hits_here, sPEPulseTime, sPEPulseAmp, LAPPD_gridSize, speed_of_light, "up")
+                waveform_down = generate_waveform_for_strip(hits_here, sPEPulseTime, sPEPulseAmp, LAPPD_gridSize, speed_of_light,  "down", useLogNorm = useLogNorm)
+                waveform_up = generate_waveform_for_strip(hits_here, sPEPulseTime, sPEPulseAmp, LAPPD_gridSize, speed_of_light, "up", useLogNorm = useLogNorm)
                 
                 #print("waveform_down: ", waveform_down)
                 
@@ -806,6 +852,9 @@ def generate_lappd_waveforms(LAPPD_Hits_2D, sPEPulseTime, sPEPulseAmp,LAPPD_stri
                         dStrip = abs(cros-x)
 
                         delay = max_pulse_time + dStrip * crossTalk_TimeDelay # in ns
+                        if useLogNorm:
+                            delay =  dStrip * crossTalk_TimeDelay
+                        # for example, at strip d = 5, delay ~ 1.797 + 5*0.09 = 2.247 ns
                         amplitude = max(sPEPulseAmp)*crossTalk_Amp # in mV
                         sigma = 0.48+0.036*dStrip # in ns
 

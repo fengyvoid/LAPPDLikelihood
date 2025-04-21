@@ -481,8 +481,8 @@ if __name__ == "__main__":
                 SampleTimes = 1
                 mu_dx = 0.0067
                 mu_dy = 0.0067
-                mu_dx_step = 0.5
-                mu_dy_step = 20
+                mu_dx_step = 6
+                mu_dy_step = 6
                 LAPPD_profile = dc.LAPPD_profile(absorption_wavelengths,absorption_coefficients,qe_2d,gain_2d,QEvsWavelength_lambda,QEvsWavelength_QE,10,1,LAPPD_grids,sPE_pulse_time,sPE_pulse,LAPPD_stripWidth,LAPPD_stripSpace)
                 
                 
@@ -519,7 +519,7 @@ if __name__ == "__main__":
                         # 偏移信息组
                         shifted_group = samp_group.create_group("shifted_info")
                 
-                        for xStep in range(0, int(mu_dx_step*2)):
+                        for xStep in range(1, int(mu_dx_step*2)):
                             for yStep in range(1, int(mu_dy_step*2)):
                                 print("Making step: ", xStep, yStep)
                                 

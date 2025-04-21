@@ -24,6 +24,10 @@ all_x_values, all_y_values = [], []
 
 plotEvent = 5
 eventnum = 0
+
+dStep = 0.0067
+halfBin = dStep / 2
+
 for file_path in file_paths:
 
     
@@ -100,8 +104,7 @@ for file_path in file_paths:
                 yi = np.where(y_unique == y_values[i])[0][0]
                 PLog_grid[yi, xi] = PLog_values[i]
                 
-            dStep = 0.03
-            halfBin = dStep / 2
+
 
             plt.figure(figsize=(8, 6))
             plt.imshow(PLog_grid, origin="lower", extent=[x_unique.min()-halfBin, x_unique.max()+halfBin, y_unique.min()-halfBin, y_unique.max()+halfBin],
@@ -144,9 +147,10 @@ plt.title("Delta position of the most probable solution for all events")
 plt.savefig(os.path.join(output_folder, f"stat_hist2D.png"))
 plt.close()
 
+unique = y_unique
 
 plt.figure(figsize=(8, 5))
-counts, bins, _ = plt.hist(maxXData, bins=len(x_unique), range=(x_unique.min()-0.025, x_unique.max()+0.025), 
+counts, bins, _ = plt.hist(maxXData, bins=len(unique), range=(unique.min()-halfBin, unique.max()+halfBin), 
                             alpha=0.7, color='blue', density=True)
 mu, sigma = norm.fit(maxXData)
 x = np.linspace(bins.min(), bins.max(), 300)
@@ -165,7 +169,7 @@ plt.close()
 
 
 plt.figure(figsize=(8, 5))
-counts, bins, _ = plt.hist(maxYData, bins=len(x_unique), range=(x_unique.min()-0.025, x_unique.max()+0.025), 
+counts, bins, _ = plt.hist(maxYData, bins=len(unique), range=(unique.min()-halfBin, unique.max()+halfBin), 
                             alpha=0.7, color='red', density=True)
 mu, sigma = norm.fit(maxYData)
 x = np.linspace(bins.min(), bins.max(), 300)

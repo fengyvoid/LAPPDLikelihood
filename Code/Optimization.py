@@ -262,7 +262,7 @@ def distance_1_minus_xcorr(wave1, wave2):
 # Input waveforms from multiple LAPPDs should be in the form of:
 # Waveforms_simulated[strip number][waveform_bottom, waveform_top]
 # = [[waveform_bottom_strip_0, waveform_top_strip_0], [waveform_bottom_strip_1, waveform_top_strip_1], ...]
-def Likelihood(Waveforms_simulated, Waveforms_data, high_thres = 5, low_thres = -3, shift_T_range = (0,256), pe_strip_converted = np.zeros(28), PureSimilarity = True):
+def Likelihood(Waveforms_simulated, Waveforms_data, high_thres = 5, low_thres = -3, shift_T_range = (-100,100), pe_strip_converted = np.zeros(28), PureSimilarity = True):
     
     #L_best = 0  # for probability
     L_best = 1e20  # for distance
@@ -337,6 +337,8 @@ def Likelihood(Waveforms_simulated, Waveforms_data, high_thres = 5, low_thres = 
             waveN += 1
             #print(f"Calculating sim in Likelihood: {s[0][0]:.5f}, {s[1][0]:.5f}, {s[0][1]:.5f}, {s[1][1]:.5f}")
         ######################################################################################################
+       
+       # print("shift_t", shift_t, "L", L)
         if L < L_best: # for distance
         #if L > L_best: # for probability
             L_best = L
@@ -1027,7 +1029,30 @@ def MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, mu_input, 
     
     
     if (not makeGridL):
-        print("not making grid")
+        print("not making grid, only save the waveform for analysis")
+        SaveFile = savePath + 'X0Y0'
+        shiftedPosition = [mu_position[0] , mu_position[1] , mu_position[2]]
+        Sim_Waveforms_Sumed, pe_strip_samples, hit_2D, PE_averaged = DoProjectionForWaveformAndSave(LAPPD_profile, shiftedPosition, mu_direction, muon_step = mu_step, phi_steps=phi_steps, sampleTimes = 1, savePath = SaveFile +'.hdf5')
+        Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
+        L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
+        WCSimFile = SaveFile + 'WCSim_WithSimShift' + str(shift_T_0) + '.hdf5'
+        with h5py.File(WCSimFile, 'w') as Wf:
+            max_shape = (None,)
+            dset_p = Wf.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
+            dset_num = Wf.create_dataset("num", shape=(0,), maxshape=max_shape, dtype="f4")
+            dset_wave = Wf.create_dataset("wave", shape=(0, 28, 2, 256), maxshape=(None, 28, 2, 256), dtype="f4")
+            dset_p.resize((2,))
+            dset_num.resize((2,))
+            dset_wave.resize((2, 28, 2, 256))
+            
+            dset_p[0] = shift_T_0
+            dset_wave[0] = Data_waveforms_converted
+            dset_num[0] = PE_averaged
+            dset_p[1] = MCHitNumber
+            dset_wave[1] = Sim_Waveforms_sampled_converted
+            dset_num[1] = PE_averaged
+            
+
     else:
         XStepSize = 0.1
         YStepSize = 0.1
@@ -1063,11 +1088,11 @@ def MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, mu_input, 
                     dset_p[1] = MCHitNumber
                     dset_wave[1] = Sim_Waveforms_sampled_converted
                     dset_num[1] = PE_averaged
-                    break
+                    
 
                 printWaveform(Sim_Waveforms_sampled_converted, Data_waveforms_converted, shift_T_0, sampling = True)
                 
-        improved_global = True
+    improved_global = True
 
     return mu_optimization_chain, improved_global  
         
@@ -2045,7 +2070,7 @@ def fill_empty_pdf(i, j, PDFMap):
 
 
 
-def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False, sampleTimes = 20, saving = False, savePath ='waveforms.hdf5'):
+def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muon_step = 0.01, muon_prop_steps = 2000, phi_steps = 360, weightingBy2D = False, sampleTimes = 20, saving = False, savePath ='waveforms.hdf5', saveWaveform = False):
     mu_positions = [mu_position + (i * mu_direction * muon_step) for i in range(muon_prop_steps)]
     mu_positions = [pos for pos in mu_positions if (pos[2] < 2.948)]
     print("mu_positions:", mu_position, mu_direction)
@@ -2074,6 +2099,7 @@ def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muo
     AllHit2Ds = []
     PE_averaged = 0
     
+
     with h5py.File(savePath, 'w') as f:
         max_shape = (None, )  
         dset_p = f.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
@@ -2123,9 +2149,9 @@ def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muo
     #print("normalized weights:", weights)
     save_directory = "/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/4.NoInnerStructure/FirstTest_withHolder"
 
-    with open(save_directory+'/prob_data.txt', 'w') as f:
-        for up, w in zip(unnormalized_probs, weights):
-            f.write(f"{up}\t{w}\n")
+    #with open(save_directory+'/prob_data.txt', 'w') as f:
+    #    for up, w in zip(unnormalized_probs, weights):
+    #        f.write(f"{up}\t{w}\n")
     
     # sum AllWaveforms with weights
     Sim_Waveforms_Sumed = []
