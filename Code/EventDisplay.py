@@ -67,7 +67,7 @@ deadPMTs = [[i - TC[0] for i in deadPMTs[0]], [i - TC[1]/100 for i in deadPMTs[1
 '''
 
 # MRD position
-MRDFile = '/Users/fengy/Documents/GitHub/ToolAnalysis/configfiles/LoadGeometry/FullMRDGeometry_09_29_20.csv'
+MRDFile = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/LAPPDProfile/FullMRDGeometry_09_29_20.csv'
 with open(MRDFile, 'r') as file:
     lines = file.readlines()
 df = pd.read_csv(MRDFile, skiprows=0)

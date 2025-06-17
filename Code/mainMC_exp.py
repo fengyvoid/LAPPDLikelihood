@@ -77,7 +77,7 @@ if __name__ == "__main__":
     MCrunNumber = 0
     MCSubRunNumber = 0
 
-    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/8.PrepareForDQM/waveforms/noInnerStructure/ANNIETree_MC_x0_y0_dirx-1_diry0.root'
+    root_file_pattern = '/Users/fengy/ANNIESofts/Analysis/ProjectionComplete/OptimizationResults/8.PrepareForDQM/waveforms/noInnerStructure/ANNIETree_MC_x2_y0_dirx1_diry0.root'
 
     
     SelectEntry = False
