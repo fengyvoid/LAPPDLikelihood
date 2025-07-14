@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
 
     processStartEntry = 0
-    processEventNumber = 500
+    processEventNumber = 100
 
     pdfName = 'EventDisplay.pdf'
     printEventNumber = 0
