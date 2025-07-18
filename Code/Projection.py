@@ -322,6 +322,8 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True, dt = 5e
                 continue
            # print("hit time", hits_withPE[i][j][3])
             if(reSampled):
+                #hits_withPE[simulation particle step i][hit j]
+                #LAPPD_idx, y_idx, x_idx, hit_time, photon_distance, expectedPE, sampledPE
                 LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3]+dt, hits_withPE[i][j][6]))
             else:
                 LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3]+dt, hits_withPE[i][j][5]))

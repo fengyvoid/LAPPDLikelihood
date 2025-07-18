@@ -18,6 +18,7 @@ import json
 import h5py
 
 '''
+# out of dated
 Overall idea:
 Start from a muon parameter set gamma = (x,y,z,theta,phi)
     Calculate L.
@@ -37,6 +38,7 @@ Start from a muon parameter set gamma = (x,y,z,theta,phi)
             Then L_now is the L_n for the n_th step with current gamma', then vary gamma to move to next step. 
 
 
+# out of dated
 Optimization procedure:
 At L step 0:
     Start from a muon parameter set gamma = (x,y,z,theta,phi), get the hit distribution on LAPPD surface H_0 from this gamma
@@ -1036,6 +1038,11 @@ def MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, mu_input, 
         Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
         L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
         WCSimFile = SaveFile + 'WCSim_WithSimShift' + str(shift_T_0) + '.hdf5'
+        for i in range(len(hit_2D)):
+            print("hit_2D[{}]: {}".format(i, hit_2D[i]))
+            for j in range(len(hit_2D[i])):
+                print("hit_2D[{}][{}]: {}".format(i, j, hit_2D[i][j]))
+                
         with h5py.File(WCSimFile, 'w') as Wf:
             max_shape = (None,)
             dset_p = Wf.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
