@@ -1038,27 +1038,46 @@ def MuonOptimization_weightingManyTimesAndSaveWaveform(LAPPD_profile, mu_input, 
         Sim_Waveforms_sampled_converted, Data_waveforms_converted, pe_strip_converted = ConvertWaveform(Sim_Waveforms_Sumed, data_waveforms, pe_strip_samples)
         L_xy, Similarities_0, shift_T_0 = Likelihood(Sim_Waveforms_sampled_converted, Data_waveforms_converted, high_thres = high_thres, low_thres = low_thres, pe_strip_converted = pe_strip_converted, PureSimilarity = False)
         WCSimFile = SaveFile + 'WCSim_WithSimShift' + str(shift_T_0) + '.hdf5'
-        for i in range(len(hit_2D)):
-            print("hit_2D[{}]: {}".format(i, hit_2D[i]))
-            for j in range(len(hit_2D[i])):
-                print("hit_2D[{}][{}]: {}".format(i, j, hit_2D[i][j]))
+        #for i in range(len(hit_2D)):
+        #    print("hit_2D[{}]: {}".format(i, hit_2D[i]))
+        #    for j in range(len(hit_2D[i])):   
+        #        print("hit_2D[{}][{}]: {}".format(i, j, hit_2D[i][j]))
+        
+        Saving2DHit = []
+        for lid in range(len(hit_2D)):
+            Hit_flat = np.zeros((28,28,2))
+            for strip in range(28):
+                for hit in hit_2D[lid][strip]:
+                    y_idx, hit_time, expectedPE = hit
+                    # Hit_flat[strip][y_idx][0] is weighted hit arrival time
+                    # Hit_flat[strip][y_idx][1] is expected PE
+                    Hit_flat[strip][y_idx][0] = (Hit_flat[strip][y_idx][0]* Hit_flat[strip][y_idx][1] + hit_time * expectedPE)/(Hit_flat[strip][y_idx][1] + expectedPE)
+                    Hit_flat[strip][y_idx][1] += expectedPE
+            Saving2DHit.append(Hit_flat)
+        print("Saving 2D hit shape: ", np.array(Saving2DHit).shape)
+            
                 
         with h5py.File(WCSimFile, 'w') as Wf:
             max_shape = (None,)
             dset_p = Wf.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
             dset_num = Wf.create_dataset("num", shape=(0,), maxshape=max_shape, dtype="f4")
             dset_wave = Wf.create_dataset("wave", shape=(0, 28, 2, 256), maxshape=(None, 28, 2, 256), dtype="f4")
+            dset_hit2D = Wf.create_dataset("hit_2D", shape=(0, 1, 28, 28, 2), maxshape=(None, 1, 28, 28, 2), dtype="f4")
+
             dset_p.resize((2,))
             dset_num.resize((2,))
             dset_wave.resize((2, 28, 2, 256))
-            
+            dset_hit2D.resize((1, len(Saving2DHit), 28, 28, 2))
+
             dset_p[0] = shift_T_0
             dset_wave[0] = Data_waveforms_converted
             dset_num[0] = PE_averaged
             dset_p[1] = MCHitNumber
             dset_wave[1] = Sim_Waveforms_sampled_converted
             dset_num[1] = PE_averaged
-            
+            dset_hit2D[0] = np.array(Saving2DHit)
+            #Saving2DHit[LAPPD id][strip number][y index][0] is weighted hit arrival time
+            #Saving2DHit[LAPPD id][strip number][y index][1] is expected PE
 
     else:
         XStepSize = 0.1
@@ -2106,7 +2125,7 @@ def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muo
     AllHit2Ds = []
     PE_averaged = 0
     
-
+    '''
     with h5py.File(savePath, 'w') as f:
         max_shape = (None, )  
         dset_p = f.create_dataset("p", shape=(0,), maxshape=max_shape, dtype="f4")  
@@ -2116,6 +2135,7 @@ def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muo
         for i in range(sampleTimes):
             sampled_hits_withPE, logP = sample_updatedHits_PE_Poisson(updated_hits_withPE)
             LAPPD_Hit_2D, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1, reSampled = True)
+            
             if PE_averaged == 0:
                 PE_averaged = totalPE
             else:
@@ -2139,6 +2159,34 @@ def DoProjectionForWaveformAndSave(LAPPD_profile, mu_position, mu_direction, muo
             AllWaveforms.append(Sim_Waveforms_sampled)
             logP_list.append(logP)
             print(i, ", logP:", logP)
+    '''
+            
+
+    for i in range(sampleTimes):
+        sampled_hits_withPE, logP = sample_updatedHits_PE_Poisson(updated_hits_withPE)
+        LAPPD_Hit_2D, totalPE = proj.convertToHit_2D(sampled_hits_withPE, number_of_LAPPDs = 1, reSampled = True)
+        
+        if PE_averaged == 0:
+            PE_averaged = totalPE
+        else:
+            PE_averaged = (PE_averaged + totalPE)/2
+        print("totalPE is ", totalPE, PE_averaged)
+        
+        #print("LAPPD_Hit_2D:", LAPPD_Hit_2D)
+        # [id][[] for __ in range(28)] (y_idx, hit_time, expectedPE)
+        Sim_Waveforms_sampled, pe_strip_samples = proj.generate_lappd_waveforms(LAPPD_Hit_2D, LAPPD_profile.sPE_pulse_time, LAPPD_profile.sPE_pulse, LAPPD_profile.LAPPD_stripWidth, LAPPD_profile.LAPPD_stripSpace,  generatePE = True)
+        Sim_Waveforms_converted = np.array(ConvertWaveformSimOnly(Sim_Waveforms_sampled))
+        #print("Sim_Waveforms_converted shape:", Sim_Waveforms_converted.shape)
+
+        
+        AllHit2Ds.append(LAPPD_Hit_2D)
+        AllWaveforms.append(Sim_Waveforms_sampled)
+        logP_list.append(logP)
+        print(i, ", logP:", logP)
+            
+            
+            
+            
         
     logP_max = max(logP_list)
     print("Find the maxP = ", logP_max, " prob = ", math.exp(logP_max))

@@ -329,6 +329,8 @@ def convertToHit_2D(hits_withPE, number_of_LAPPDs = 1, reSampled = True, dt = 5e
                 LAPPD_Hit_2D[hits_withPE[i][j][0]][hits_withPE[i][j][2]].append((hits_withPE[i][j][1], hits_withPE[i][j][3]+dt, hits_withPE[i][j][5]))
             totalPE+=hits_withPE[i][j][6]
             
+    #LAPPD_Hit_2D[LAPPD ID][strip index(vertical strip)]
+    #hit = (vertical pixel index, hit arrival time, allocated PE)
     return LAPPD_Hit_2D, totalPE
 
 
