@@ -202,7 +202,7 @@ if __name__ == "__main__":
     qe_data_63 = pd.read_csv(qe_file_63)
 
     wavelength25 = qe_data_25['Wavelength (nm)'].values
-    QE25 = qe_data_25['Average QE'].values/3
+    QE25 = qe_data_25['Average QE'].values
     
     #print("wavelength25",wavelength25)
     #print("QE25 is ",QE25)
